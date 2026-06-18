@@ -103,6 +103,28 @@ def close_positions(x_dashboard_password: str | None = Header(default=None)):
         raise HTTPException(status_code=502, detail=f"Close failed: {e}")
 
 
+@app.get("/api/orders")
+def orders():
+    _require_keys()
+    try:
+        return {"orders": alpaca_client.get_open_orders()}
+    except Exception as e:  # noqa: BLE001
+        raise HTTPException(status_code=502, detail=str(e))
+
+
+@app.post("/api/cancel")
+def cancel_orders(x_dashboard_password: str | None = Header(default=None)):
+    _check_password(x_dashboard_password)
+    _require_keys()
+    try:
+        result = alpaca_client.cancel_all_orders()
+        db.log_event("cancel", result)
+        return result
+    except Exception as e:  # noqa: BLE001
+        db.log_event("error", {"action": "cancel", "error": str(e)})
+        raise HTTPException(status_code=502, detail=f"Cancel failed: {e}")
+
+
 @app.get("/api/positions")
 def positions():
     _require_keys()

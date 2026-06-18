@@ -8,8 +8,8 @@ from alpaca.data.historical import StockHistoricalDataClient
 from alpaca.data.historical.option import OptionHistoricalDataClient
 from alpaca.data.requests import OptionLatestQuoteRequest, StockLatestTradeRequest
 from alpaca.trading.client import TradingClient
-from alpaca.trading.enums import OrderClass, OrderSide, TimeInForce
-from alpaca.trading.requests import LimitOrderRequest, OptionLegRequest
+from alpaca.trading.enums import OrderClass, OrderSide, QueryOrderStatus, TimeInForce
+from alpaca.trading.requests import GetOrdersRequest, LimitOrderRequest, OptionLegRequest
 
 from . import config
 from .strategy import Rung, all_symbols, build_ladder, net_credit, payoff_summary
@@ -169,6 +169,33 @@ def open_ladder(preset: dict) -> dict:
         "submitted": sum(1 for r in results if r.get("ok")),
         "failed": sum(1 for r in results if not r.get("ok")),
     }
+
+
+def get_open_orders() -> list[dict]:
+    """Currently working/queued orders (e.g. unfilled limit combos)."""
+    orders = _trading().get_orders(GetOrdersRequest(status=QueryOrderStatus.OPEN, limit=50))
+    out = []
+    for o in orders:
+        legs = getattr(o, "legs", None) or []
+        out.append({
+            "id": str(o.id),
+            "status": str(o.status).split(".")[-1],
+            "order_class": (str(o.order_class).split(".")[-1] if o.order_class else ""),
+            "qty": float(o.qty) if o.qty else None,
+            "limit_price": float(o.limit_price) if o.limit_price else None,
+            "legs": [
+                {"side": str(l.side).split(".")[-1], "symbol": l.symbol,
+                 "ratio_qty": float(l.ratio_qty)}
+                for l in legs
+            ],
+        })
+    return out
+
+
+def cancel_all_orders() -> dict:
+    """Cancel every open order (clears queued/working orders)."""
+    resp = _trading().cancel_orders()
+    return {"requested": len(resp)}
 
 
 def get_option_positions() -> list[dict]:

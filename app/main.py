@@ -37,8 +37,9 @@ async def require_login(request: Request, call_next):
         ok = False
         if auth.startswith("Basic "):
             try:
-                pw = base64.b64decode(auth[6:]).decode("utf-8").split(":", 1)[1]
-                ok = secrets.compare_digest(pw, config.DASHBOARD_PASSWORD)
+                user, _, pw = base64.b64decode(auth[6:]).decode("utf-8").partition(":")
+                ok = (secrets.compare_digest(user, config.DASHBOARD_USER)
+                      and secrets.compare_digest(pw, config.DASHBOARD_PASSWORD))
             except Exception:  # noqa: BLE001
                 ok = False
         if not ok:

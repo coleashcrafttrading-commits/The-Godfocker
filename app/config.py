@@ -21,6 +21,7 @@ SUPABASE_ANON_KEY = os.getenv("SUPABASE_ANON_KEY", "")
 SUPABASE_ENABLED = bool(SUPABASE_URL and SUPABASE_ANON_KEY)
 
 # --- Dashboard ---
+DASHBOARD_USER = os.getenv("DASHBOARD_USER", "admin")
 DASHBOARD_PASSWORD = os.getenv("DASHBOARD_PASSWORD", "changeme")
 PASSWORD_REQUIRED = DASHBOARD_PASSWORD not in ("", "changeme")
 

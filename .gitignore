@@ -25,5 +25,6 @@ Thumbs.db
 automation.json
 earnings.json
 
-# Tunnel binary (downloaded per-machine)
+# Tunnel binary (downloaded per-machine) + its logs
 cloudflared.exe
+cf_*.log

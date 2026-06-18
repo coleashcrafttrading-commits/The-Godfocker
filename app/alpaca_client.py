@@ -21,10 +21,14 @@ from .strategy import (
     Rung,
     all_symbols,
     build_ladder,
+    implied_vol,
     net_credit,
     payoff_curve,
     payoff_summary,
 )
+
+# Risk-free rate used by the simulator's Black-Scholes pricing (approx, short-dated).
+SIM_RATE = 0.04
 
 EASTERN = ZoneInfo("America/New_York")
 
@@ -164,6 +168,44 @@ def preview(preset: dict) -> dict:
         spot=spot,
     )
 
+    # Build the interactive-simulator payload: per-leg implied vol + time to expiry,
+    # so the dashboard can re-price the whole position at any underlying/time client-side.
+    sim = None
+    if curve:
+        now_et = datetime.now(EASTERN)
+        exp_dt = datetime(exp.year, exp.month, exp.day, 16, 0, tzinfo=EASTERN)
+        t_years = max((exp_dt - now_et).total_seconds(), 60) / (365.25 * 24 * 3600)
+        sim_legs = []
+        all_quoted = True
+        for rv in rung_views:
+            for leg in rv["legs"]:
+                entry = leg["mid"]
+                if entry is None:
+                    all_quoted = False
+                    break
+                is_call = leg["right"] == "C"
+                iv = implied_vol(entry, spot, leg["strike"], t_years, SIM_RATE, is_call)
+                sim_legs.append({
+                    "strike": leg["strike"],
+                    "type": leg["right"],
+                    "side": "short" if leg["side"] == "sell" else "long",
+                    "entry": entry,
+                    "iv": iv if iv > 0 else 0.20,  # fallback if IV can't be solved
+                })
+            if not all_quoted:
+                break
+        if all_quoted and sim_legs:
+            sim = {
+                "spot": spot,
+                "t_years": round(t_years, 6),
+                "dte_days": round(t_years * 365.25, 2),
+                "r": SIM_RATE,
+                "qty": int(preset["quantity"]),
+                "lo": curve["lo"],
+                "hi": curve["hi"],
+                "legs": sim_legs,
+            }
+
     return {
         "underlying": underlying,
         "spot": spot,
@@ -176,6 +218,7 @@ def preview(preset: dict) -> dict:
         "est_credit_dollars": round(total_credit * 100, 2),
         "risk": risk,
         "curve": curve,
+        "sim": sim,
     }
 
 

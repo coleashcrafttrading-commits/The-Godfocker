@@ -13,6 +13,7 @@ Example (ATM=751, center_spacing=1, wing_width=3):
 """
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass, field
 from datetime import date
 
@@ -130,6 +131,39 @@ def payoff_summary(centers: list[float], credits: list[float | None],
         "credit_collected": round(sum(cr for _, cr in pairs) * mult, 2),
         "rungs_priced": n,
     }
+
+
+def _norm_cdf(x: float) -> float:
+    return 0.5 * math.erfc(-x / math.sqrt(2))
+
+
+def black_scholes(S: float, K: float, t: float, r: float, sigma: float, is_call: bool) -> float:
+    """European Black-Scholes price (no dividends). At/after expiry returns intrinsic."""
+    if t <= 0 or sigma <= 0:
+        return max((S - K) if is_call else (K - S), 0.0)
+    sqrt_t = math.sqrt(t)
+    d1 = (math.log(S / K) + (r + sigma * sigma / 2) * t) / (sigma * sqrt_t)
+    d2 = d1 - sigma * sqrt_t
+    if is_call:
+        return S * _norm_cdf(d1) - K * math.exp(-r * t) * _norm_cdf(d2)
+    return K * math.exp(-r * t) * _norm_cdf(-d2) - S * _norm_cdf(-d1)
+
+
+def implied_vol(price: float, S: float, K: float, t: float, r: float, is_call: bool) -> float:
+    """Back out implied volatility from a market price via bisection. 0.0 if unsolvable."""
+    intrinsic = max((S - K) if is_call else (K - S), 0.0)
+    if t <= 0 or price <= intrinsic + 1e-6:
+        return 0.0
+    lo, hi = 1e-4, 5.0
+    if black_scholes(S, K, t, r, hi, is_call) < price:
+        return 0.0  # price above model max — give up, caller uses a default
+    for _ in range(64):
+        mid = (lo + hi) / 2
+        if black_scholes(S, K, t, r, mid, is_call) > price:
+            hi = mid
+        else:
+            lo = mid
+    return round((lo + hi) / 2, 4)
 
 
 def payoff_curve(centers: list[float], credits: list[float | None],

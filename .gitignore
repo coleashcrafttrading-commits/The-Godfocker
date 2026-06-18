@@ -23,3 +23,4 @@ Thumbs.db
 
 # Runtime automation state (per-machine; auto-created on first run)
 automation.json
+earnings.json

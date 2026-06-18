@@ -1,0 +1,265 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Butterfly Bot — Earnings Strategy</title>
+<style>
+  :root { --bg:#0e1116; --panel:#171c24; --panel2:#1f2630; --line:#2a323d; --text:#e6edf3;
+    --muted:#8b97a7; --green:#2ea043; --green2:#3fb950; --red:#da3633; --red2:#f85149; --amber:#d29922; --blue:#388bfd; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--text); font:14px/1.5 -apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif; }
+  .wrap { max-width:1800px; width:100%; margin:0 auto; padding:20px 26px 40px; }
+  h1 { font-size:20px; margin:0; } h2 { font-size:13px; text-transform:uppercase; letter-spacing:.06em; color:var(--muted); margin:0 0 12px; }
+  .row { display:flex; gap:14px; flex-wrap:wrap; } .grow { flex:1 1 360px; }
+  .panel { background:var(--panel); border:1px solid var(--line); border-radius:12px; padding:16px; }
+  .topbar { display:flex; align-items:center; justify-content:space-between; margin-bottom:16px; gap:12px; flex-wrap:wrap; }
+  .badge { font-size:12px; font-weight:700; padding:4px 10px; border-radius:999px; }
+  .badge.paper { background:rgba(56,139,253,.15); color:var(--blue); border:1px solid var(--blue); }
+  .badge.live { background:rgba(218,54,51,.15); color:var(--red2); border:1px solid var(--red2); }
+  .nav { display:flex; gap:8px; margin-bottom:18px; }
+  .navlink { padding:8px 16px; border-radius:9px; text-decoration:none; color:var(--muted); border:1px solid var(--line); font-weight:600; font-size:14px; }
+  .navlink.active { color:var(--text); background:var(--panel2); border-color:var(--blue); }
+  .controls { display:grid; grid-template-columns:1fr 1fr; gap:10px 14px; }
+  label { display:flex; flex-direction:column; gap:4px; font-size:12px; color:var(--muted); }
+  input,select { background:var(--panel2); border:1px solid var(--line); color:var(--text); border-radius:8px; padding:8px 10px; font-size:14px; font-variant-numeric:tabular-nums; }
+  .btn { border:0; border-radius:10px; padding:10px 14px; font-size:14px; font-weight:700; cursor:pointer; color:#fff; }
+  .btn:disabled { opacity:.5; cursor:not-allowed; }
+  .btn.run { background:var(--blue); } .btn.ghost { background:var(--panel2); color:var(--text); border:1px solid var(--line); font-weight:600; }
+  .btn.sm { padding:5px 9px; font-size:12px; }
+  .btn.red { background:var(--red); }
+  table { width:100%; border-collapse:collapse; font-size:13px; } th,td { text-align:right; padding:6px 8px; border-bottom:1px solid var(--line); font-variant-numeric:tabular-nums; }
+  th:first-child,td:first-child { text-align:left; } th { color:var(--muted); font-weight:600; }
+  .pos { color:var(--green2); } .neg { color:var(--red2); } .muted { color:var(--muted); } .spacer { height:14px; }
+  .hint { font-size:12px; color:var(--muted); margin-top:8px; }
+  .switch { position:relative; display:inline-block; width:58px; height:32px; }
+  .switch input { opacity:0; width:0; height:0; }
+  .slider { position:absolute; cursor:pointer; inset:0; background:var(--line); border-radius:32px; transition:.2s; }
+  .slider:before { content:""; position:absolute; height:24px; width:24px; left:4px; bottom:4px; background:#fff; border-radius:50%; transition:.2s; }
+  input:checked + .slider { background:var(--green); } input:checked + .slider:before { transform:translateX(26px); }
+  .statusbig { font-size:18px; font-weight:800; } .on { color:var(--green2); } .off { color:var(--muted); }
+  textarea { width:100%; background:var(--panel2); border:1px solid var(--line); color:var(--text); border-radius:8px; padding:8px 10px; font:13px ui-monospace,Consolas,monospace; min-height:70px; }
+  #toast { position:fixed; bottom:20px; left:50%; transform:translateX(-50%); background:var(--panel2); border:1px solid var(--line); border-radius:10px; padding:12px 16px; max-width:90%; display:none; z-index:9; }
+  .tag { font-size:11px; padding:2px 7px; border-radius:6px; border:1px solid var(--line); }
+  .tag.bmo { color:var(--amber); border-color:var(--amber); } .tag.amc { color:var(--blue); border-color:var(--blue); }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="topbar">
+    <div style="display:flex;align-items:center;gap:12px;">
+      <h1>🦋 Butterfly Bot</h1>
+      <span class="badge {{ 'paper' if paper else 'live' }}">{{ 'PAPER' if paper else 'LIVE' }}</span>
+    </div>
+    <div id="acct" class="muted"></div>
+  </div>
+  <div class="nav">
+    <a href="/" class="navlink">Manual</a>
+    <a href="/automation" class="navlink">Automation</a>
+    <a href="/earnings" class="navlink active">Earnings Strategy</a>
+  </div>
+
+  <div class="row">
+    <!-- Strategy builder + automation -->
+    <div class="panel grow">
+      <h2>Straddle Strategy Builder</h2>
+      <div style="display:flex;align-items:center;gap:16px;margin-bottom:12px;">
+        <label class="switch" style="flex:none"><input type="checkbox" id="enabled" onchange="toggle()" /><span class="slider"></span></label>
+        <div><div class="statusbig"><span id="statetext" class="off">OFF</span></div>
+          <div class="muted" id="statusline" style="font-size:13px">Automation off.</div></div>
+      </div>
+      <div class="controls">
+        <label>Strategy<select id="strategy_type"><option value="straddle">Straddle (ATM call+put)</option><option value="strangle">Strangle (OTM call+put)</option></select></label>
+        <label>Strike mode<select id="strike_mode"><option value="atm">ATM (auto)</option><option value="custom">Custom strike</option></select></label>
+        <label>Custom strike (if custom)<input id="custom_strike" type="number" min="0" step="1" /></label>
+        <label>Strangle offset ($, each side)<input id="strangle_offset" type="number" min="0" step="0.5" /></label>
+        <label>Quantity<input id="quantity" type="number" min="1" step="1" /></label>
+        <label>Min days to expiry after earnings<input id="min_dte_after_earnings" type="number" min="0" step="1" /></label>
+        <label>Limit shade ($, pay above mid)<input id="limit_shade" type="number" min="0" step="0.01" /></label>
+        <label>Buy minutes before close<input id="entry_minutes_before_close" type="number" min="1" step="1" /></label>
+      </div>
+      <div class="hint">When ON, each trading day the bot buys this straddle for any calendar ticker whose
+        <b>entry day is today</b>, as late as possible before the close (BMO &rarr; the day before; AMC &rarr; the same day).</div>
+      <div class="spacer"></div>
+      <button class="btn ghost" onclick="savePreset()">Save strategy settings</button>
+    </div>
+
+    <!-- P&L -->
+    <div class="panel grow">
+      <h2>Earnings Strategy P&amp;L <span id="pnlTotal" style="font-size:13px;font-weight:700"></span></h2>
+      <div class="muted" id="pnlNote">Open positions on your earnings tickers only (separate from the butterfly ladder).</div>
+      <div class="spacer"></div>
+      <table id="pnlTable"><thead><tr><th>Symbol</th><th>Qty</th><th>Avg</th><th>Mkt Val</th><th>Unreal. P/L</th></tr></thead>
+        <tbody><tr><td colspan="5" class="muted">none</td></tr></tbody></table>
+    </div>
+  </div>
+
+  <div class="spacer"></div>
+
+  <!-- Calendar -->
+  <div class="row">
+    <div class="panel grow" style="flex:2 1 600px">
+      <h2>Earnings Calendar</h2>
+      <div class="controls" style="grid-template-columns:1fr 1fr 1fr auto;align-items:end;">
+        <label>Ticker<input id="c_ticker" placeholder="AAPL" /></label>
+        <label>Earnings date<input id="c_date" type="date" /></label>
+        <label>Timing<select id="c_timing"><option value="AMC">AMC (after close)</option><option value="BMO">BMO (before open)</option></select></label>
+        <button class="btn run" onclick="addRow()">+ Add</button>
+      </div>
+      <div class="spacer"></div>
+      <label>Bulk import (one per line: <code>TICKER, YYYY-MM-DD, AMC|BMO</code>)
+        <textarea id="importBox" placeholder="AAPL, 2026-07-30, AMC&#10;NVDA, 2026-08-27, AMC&#10;WMT, 2026-08-20, BMO"></textarea></label>
+      <div class="row" style="margin-top:8px">
+        <button class="btn ghost" onclick="importRows()">Import list</button>
+        <button class="btn ghost red" onclick="clearCal()">Clear all</button>
+      </div>
+      <div class="spacer"></div>
+      <table id="calTable">
+        <thead><tr><th>Ticker</th><th>Earnings</th><th>Timing</th><th>Buy on</th><th>Last run</th><th></th></tr></thead>
+        <tbody><tr><td colspan="6" class="muted">No companies yet — add some above.</td></tr></tbody>
+      </table>
+    </div>
+
+    <!-- Preview -->
+    <div class="panel grow">
+      <h2>Straddle Preview</h2>
+      <div class="muted" id="previewHint">Click <b>Preview</b> on a calendar row to see the exact contracts it will buy.</div>
+      <div id="previewBox" style="display:none">
+        <div class="kv" style="display:grid;grid-template-columns:auto 1fr;gap:6px 14px;font-size:13px;">
+          <div class="muted">Ticker</div><div style="text-align:right" id="pv_ticker">—</div>
+          <div class="muted">Spot</div><div style="text-align:right" id="pv_spot">—</div>
+          <div class="muted">Expiration</div><div style="text-align:right" id="pv_exp">—</div>
+          <div class="muted">Net debit (cost to buy)</div><div style="text-align:right" id="pv_debit">—</div>
+          <div class="muted">Total cost / Max loss</div><div style="text-align:right neg" id="pv_cost">—</div>
+        </div>
+        <div class="spacer"></div>
+        <table id="legsTable"><thead><tr><th>Leg</th><th>Side</th><th>Strike</th><th>Mid</th></tr></thead><tbody></tbody></table>
+      </div>
+    </div>
+  </div>
+
+  <div class="spacer"></div>
+  <div class="panel">
+    <h2>Auto-buy Log</h2>
+    <table id="logTable"><thead><tr><th>When (ET)</th><th>Ticker</th><th>Result</th></tr></thead>
+      <tbody><tr><td colspan="3" class="muted">none yet</td></tr></tbody></table>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+const PW_REQUIRED = {{ 'true' if password_required else 'false' }};
+let password = "";
+function toast(m, ok=true){ const t=document.getElementById('toast'); t.textContent=m; t.style.borderColor=ok?'var(--green)':'var(--red2)'; t.style.display='block'; clearTimeout(window.__t); window.__t=setTimeout(()=>t.style.display='none',6000); }
+function pw(){ if(PW_REQUIRED && !password) password=prompt("Dashboard password:")||""; return password; }
+function hdrs(){ const h={'Content-Type':'application/json'}; if(PW_REQUIRED) h['X-Dashboard-Password']=pw(); return h; }
+async function jget(u){ const r=await fetch(u); const d=await r.json(); if(!r.ok) throw new Error(d.detail||r.statusText); return d; }
+async function jpost(u,b){ const r=await fetch(u,{method:'POST',headers:hdrs(),body:b?JSON.stringify(b):null}); const d=await r.json(); if(!r.ok) throw new Error(d.detail||r.statusText); return d; }
+const f=(n,d=2)=>(n===null||n===undefined)?'—':Number(n).toLocaleString(undefined,{minimumFractionDigits:d,maximumFractionDigits:d});
+const PF=['strategy_type','strike_mode','custom_strike','strangle_offset','quantity','min_dte_after_earnings','limit_shade'];
+
+async function loadEarnings(){
+  try{
+    const e=await jget('/api/earnings');
+    document.getElementById('enabled').checked=e.automation_enabled;
+    document.getElementById('entry_minutes_before_close').value=e.entry_minutes_before_close;
+    const p=e.preset||{};
+    for(const k of PF){ const el=document.getElementById(k); if(el) el.value=p[k]; }
+    const st=document.getElementById('statetext'), sl=document.getElementById('statusline');
+    if(e.automation_enabled){ st.textContent='ON'; st.className='on'; sl.textContent='Armed — buys straddles near close on each ticker’s entry day.'; }
+    else { st.textContent='OFF'; st.className='off'; sl.textContent='Automation off.'; }
+    if(!e.keys_configured) document.getElementById('acct').innerHTML='<span class="neg">No API keys.</span>';
+    renderCalendar(e.calendar||[]);
+    renderPnl(e.pnl);
+    renderLog(e.log||[]);
+  }catch(err){ toast('Load: '+err.message,false); }
+}
+
+function renderCalendar(cal){
+  const tb=document.querySelector('#calTable tbody'); tb.innerHTML='';
+  if(!cal.length){ tb.innerHTML='<tr><td colspan="6" class="muted">No companies yet — add some above.</td></tr>'; return; }
+  for(const c of cal){
+    const lr = c.last_result ? (c.last_result.ok===false ? '<span class="neg">failed</span>' : '<span class="pos">bought</span>') : '<span class="muted">—</span>';
+    const tr=document.createElement('tr');
+    tr.innerHTML=`<td><b>${c.ticker}</b></td><td>${c.earnings_date}</td>`
+      +`<td><span class="tag ${c.timing.toLowerCase()}">${c.timing}</span></td>`
+      +`<td>${c.entry_day||'—'}</td><td>${lr}</td>`
+      +`<td style="text-align:right;white-space:nowrap">`
+      +`<button class="btn ghost sm" onclick="previewTicker('${c.ticker}','${c.earnings_date}')">Preview</button> `
+      +`<button class="btn run sm" onclick="buyNow('${c.ticker}','${c.earnings_date}')">Buy now</button> `
+      +`<button class="btn red sm" onclick="delRow(${c.index})">✕</button></td>`;
+    tb.appendChild(tr);
+  }
+}
+function renderPnl(pnl){
+  const tb=document.querySelector('#pnlTable tbody'); tb.innerHTML='';
+  const tot=document.getElementById('pnlTotal');
+  if(!pnl || !pnl.positions || !pnl.positions.length){ tb.innerHTML='<tr><td colspan="5" class="muted">no open earnings positions</td></tr>'; tot.textContent=''; return; }
+  for(const p of pnl.positions){ const tr=document.createElement('tr');
+    tr.innerHTML=`<td>${p.symbol}</td><td>${f(p.qty,0)}</td><td>${f(p.avg_entry_price)}</td><td>${f(p.market_value)}</td><td class="${p.unrealized_pl>=0?'pos':'neg'}">${f(p.unrealized_pl)}</td>`; tb.appendChild(tr); }
+  const ftr=document.createElement('tr'); ftr.style.borderTop='2px solid var(--muted)';
+  ftr.innerHTML=`<td><b>TOTAL</b></td><td></td><td></td><td><b>${f(pnl.total_market_value)}</b></td><td class="${pnl.total_unrealized>=0?'pos':'neg'}"><b>${(pnl.total_unrealized>=0?'+$':'-$')+f(Math.abs(pnl.total_unrealized))}</b></td>`;
+  tb.appendChild(ftr);
+  tot.textContent=`· ${(pnl.total_unrealized>=0?'+$':'-$')+f(Math.abs(pnl.total_unrealized))}`; tot.className=pnl.total_unrealized>=0?'pos':'neg';
+}
+function renderLog(log){
+  const tb=document.querySelector('#logTable tbody'); tb.innerHTML='';
+  if(!log.length){ tb.innerHTML='<tr><td colspan="3" class="muted">none yet</td></tr>'; return; }
+  for(const x of log){ const r=x.result||{}; const msg=r.ok===false?('<span class="neg">'+(r.error||'failed')+'</span>'):('<span class="pos">bought @ $'+f(r.limit_price)+' exp '+(r.expiration||'')+'</span>');
+    const tr=document.createElement('tr'); tr.innerHTML=`<td>${x.when_et}</td><td><b>${x.ticker}</b></td><td style="text-align:left">${msg}</td>`; tb.appendChild(tr); }
+}
+
+async function savePreset(){
+  const preset={}; for(const k of PF){ const el=document.getElementById(k); preset[k]= (k==='strategy_type'||k==='strike_mode')? el.value : Number(el.value); }
+  const body={ preset, entry_minutes_before_close: Number(document.getElementById('entry_minutes_before_close').value) };
+  try{ await jpost('/api/earnings/preset',body); toast('Strategy saved.'); }catch(e){ toast('Save: '+e.message,false); }
+}
+async function toggle(){
+  const enabled=document.getElementById('enabled').checked;
+  if(enabled && !confirm('Arm earnings automation? It will auto-buy straddles near close for tickers due each day.')){ document.getElementById('enabled').checked=false; return; }
+  try{ await jpost('/api/earnings/toggle',{enabled}); loadEarnings(); toast(enabled?'Earnings automation ARMED.':'Off.'); }
+  catch(e){ toast('Toggle: '+e.message,false); document.getElementById('enabled').checked=!enabled; }
+}
+async function addRow(){
+  const ticker=document.getElementById('c_ticker').value, earnings_date=document.getElementById('c_date').value, timing=document.getElementById('c_timing').value;
+  if(!ticker||!earnings_date){ toast('Enter ticker and date.',false); return; }
+  try{ await jpost('/api/earnings/calendar',{action:'add',rows:[{ticker,earnings_date,timing}]}); document.getElementById('c_ticker').value=''; loadEarnings(); }
+  catch(e){ toast('Add: '+e.message,false); }
+}
+async function importRows(){
+  const lines=document.getElementById('importBox').value.split('\n').map(s=>s.trim()).filter(Boolean);
+  const rows=lines.map(l=>{ const p=l.split(/[,\s]+/); return {ticker:p[0], earnings_date:p[1], timing:p[2]||'AMC'}; });
+  if(!rows.length){ toast('Nothing to import.',false); return; }
+  try{ await jpost('/api/earnings/calendar',{action:'add',rows}); document.getElementById('importBox').value=''; loadEarnings(); toast('Imported '+rows.length+' rows.'); }
+  catch(e){ toast('Import: '+e.message,false); }
+}
+async function delRow(i){ try{ await jpost('/api/earnings/calendar',{action:'delete',index:i}); loadEarnings(); }catch(e){ toast(e.message,false); } }
+async function clearCal(){ if(!confirm('Remove all calendar companies?'))return; try{ await jpost('/api/earnings/calendar',{action:'clear'}); loadEarnings(); }catch(e){ toast(e.message,false); } }
+
+async function previewTicker(ticker, edate){
+  try{
+    const p=await jget(`/api/earnings/preview?ticker=${encodeURIComponent(ticker)}&earnings_date=${edate}`);
+    document.getElementById('previewHint').style.display='none';
+    document.getElementById('previewBox').style.display='block';
+    document.getElementById('pv_ticker').textContent=p.ticker;
+    document.getElementById('pv_spot').textContent='$'+f(p.spot);
+    document.getElementById('pv_exp').textContent=p.expiration+' ('+p.strategy_type+')';
+    document.getElementById('pv_debit').textContent= p.net_debit!=null? '$'+f(p.net_debit) : '—';
+    document.getElementById('pv_cost').textContent= p.cost!=null? '$'+f(p.cost) : '—';
+    const tb=document.querySelector('#legsTable tbody'); tb.innerHTML='';
+    for(const l of p.legs){ const tr=document.createElement('tr');
+      tr.innerHTML=`<td>${l.symbol}</td><td class="pos">BUY ${l.right}</td><td>${f(l.strike,0)}</td><td>${f(l.mid)}</td>`; tb.appendChild(tr); }
+  }catch(e){ toast('Preview: '+e.message,false); }
+}
+async function buyNow(ticker, edate){
+  if(!confirm(`Buy the ${ticker} straddle right now (test)?`)) return;
+  try{ const r=await jpost('/api/earnings/run',{ticker,earnings_date:edate}); toast(`Bought ${ticker} @ $${f(r.limit_price)} (exp ${r.expiration}).`); loadEarnings(); }
+  catch(e){ toast('Buy failed: '+e.message,false); }
+}
+
+loadEarnings();
+setInterval(loadEarnings, 20000);
+</script>
+</body>
+</html>

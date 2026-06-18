@@ -9,7 +9,7 @@ from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
-from . import alpaca_client, config, db, scheduler
+from . import alpaca_client, config, db, earnings, scheduler
 
 
 @asynccontextmanager
@@ -116,6 +116,132 @@ def automation_run(x_dashboard_password: str | None = Header(default=None)):
     except Exception as e:  # noqa: BLE001
         db.log_event("error", {"action": "auto_run", "error": str(e)})
         raise HTTPException(status_code=502, detail=f"Run failed: {e}")
+
+
+@app.get("/earnings", response_class=HTMLResponse)
+def earnings_page(request: Request):
+    return templates.TemplateResponse("earnings.html", {
+        "request": request,
+        "paper": config.IS_PAPER,
+        "password_required": config.PASSWORD_REQUIRED,
+    })
+
+
+def _calendar_view(e: dict) -> list[dict]:
+    from datetime import date as _date
+    out = []
+    for i, c in enumerate(e.get("calendar", [])):
+        row = {"index": i, **c}
+        try:
+            ed = _date.fromisoformat(c["earnings_date"])
+            row["entry_day"] = earnings.entry_day_for(ed, c.get("timing", "AMC")).isoformat()
+        except Exception:  # noqa: BLE001
+            row["entry_day"] = None
+        out.append(row)
+    return out
+
+
+@app.get("/api/earnings")
+def earnings_status():
+    e = config.load_earnings()
+    out = {
+        "automation_enabled": e.get("automation_enabled", False),
+        "entry_minutes_before_close": e.get("entry_minutes_before_close", 5),
+        "preset": e.get("preset"),
+        "calendar": _calendar_view(e),
+        "log": e.get("log", [])[:25],
+        "keys_configured": config.keys_configured(),
+        "paper": config.IS_PAPER,
+    }
+    if config.keys_configured():
+        try:
+            out["pnl"] = earnings.earnings_pnl(e.get("calendar", []))
+        except Exception as ex:  # noqa: BLE001
+            out["pnl_error"] = str(ex)
+    return out
+
+
+@app.post("/api/earnings/preset")
+async def earnings_update(request: Request, x_dashboard_password: str | None = Header(default=None)):
+    _check_password(x_dashboard_password)
+    body = await request.json()
+    e = config.load_earnings()
+    if "entry_minutes_before_close" in body:
+        e["entry_minutes_before_close"] = int(body["entry_minutes_before_close"])
+    if isinstance(body.get("preset"), dict):
+        patch = {k: v for k, v in body["preset"].items() if k in config.EARNINGS_PRESET_FIELDS}
+        e["preset"].update(patch)
+    config.save_earnings(e)
+    return {"ok": True, "preset": e["preset"], "entry_minutes_before_close": e["entry_minutes_before_close"]}
+
+
+@app.post("/api/earnings/toggle")
+async def earnings_toggle(request: Request, x_dashboard_password: str | None = Header(default=None)):
+    _check_password(x_dashboard_password)
+    body = await request.json()
+    e = config.load_earnings()
+    e["automation_enabled"] = bool(body.get("enabled"))
+    config.save_earnings(e)
+    db.log_event("earnings_toggle", {"enabled": e["automation_enabled"]})
+    return {"enabled": e["automation_enabled"]}
+
+
+@app.post("/api/earnings/calendar")
+async def earnings_calendar_edit(request: Request, x_dashboard_password: str | None = Header(default=None)):
+    _check_password(x_dashboard_password)
+    body = await request.json()
+    e = config.load_earnings()
+    action = body.get("action")
+    if action == "delete":
+        idx = int(body.get("index", -1))
+        if 0 <= idx < len(e["calendar"]):
+            e["calendar"].pop(idx)
+    elif action == "clear":
+        e["calendar"] = []
+    else:  # add / import (list of {ticker, earnings_date, timing})
+        for row in body.get("rows", []):
+            t = str(row.get("ticker", "")).upper().strip()
+            d = str(row.get("earnings_date", "")).strip()
+            tm = str(row.get("timing", "AMC")).upper().strip()
+            if not t or not d:
+                continue
+            try:
+                from datetime import date as _date
+                _date.fromisoformat(d)
+            except Exception:  # noqa: BLE001
+                continue
+            tm = "BMO" if tm.startswith("B") else "AMC"
+            e["calendar"].append({"ticker": t, "earnings_date": d, "timing": tm, "last_fired": "", "last_result": None})
+    config.save_earnings(e)
+    return {"ok": True, "calendar": _calendar_view(e)}
+
+
+@app.get("/api/earnings/preview")
+def earnings_preview(ticker: str, earnings_date: str):
+    _require_keys()
+    from datetime import date as _date
+    e = config.load_earnings()
+    try:
+        return earnings.preview_straddle(ticker, e["preset"], _date.fromisoformat(earnings_date))
+    except Exception as ex:  # noqa: BLE001
+        raise HTTPException(status_code=502, detail=f"Preview failed: {ex}")
+
+
+@app.post("/api/earnings/run")
+async def earnings_run(request: Request, x_dashboard_password: str | None = Header(default=None)):
+    _check_password(x_dashboard_password)
+    _require_keys()
+    from datetime import date as _date
+    body = await request.json()
+    e = config.load_earnings()
+    try:
+        res = earnings.open_straddle(body["ticker"], e["preset"], _date.fromisoformat(body["earnings_date"]))
+        e.setdefault("log", []).insert(0, {"ticker": body["ticker"], "when_et": "manual", "result": res})
+        config.save_earnings(e)
+        db.log_event("earnings_open_manual", res)
+        return res
+    except Exception as ex:  # noqa: BLE001
+        raise HTTPException(status_code=502, detail=f"Run failed: {ex}")
 
 
 @app.get("/api/status")

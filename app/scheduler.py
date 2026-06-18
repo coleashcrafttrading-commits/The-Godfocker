@@ -2,12 +2,13 @@
 from __future__ import annotations
 
 import asyncio
-from datetime import datetime
+from datetime import date, datetime, timedelta
 from zoneinfo import ZoneInfo
 
 from . import alpaca_client, config, db
 
 CT = ZoneInfo("America/Chicago")
+ET = ZoneInfo("America/New_York")
 CHECK_SECONDS = 15
 FIRE_WINDOW_SECONDS = 90  # fire if we're within this many seconds past the target
 
@@ -39,11 +40,54 @@ def next_fire_iso(auto: dict) -> str | None:
 async def scheduler_loop():
     """Runs for the app's lifetime; checks every CHECK_SECONDS whether to fire."""
     while True:
-        try:
-            await _tick()
-        except Exception as e:  # noqa: BLE001 - never let the loop die
-            db.log_event("error", {"action": "scheduler", "error": str(e)})
+        for fn, name in ((_tick, "scheduler"), (_earnings_tick, "earnings_scheduler")):
+            try:
+                await fn()
+            except Exception as e:  # noqa: BLE001 - never let the loop die
+                db.log_event("error", {"action": name, "error": str(e)})
         await asyncio.sleep(CHECK_SECONDS)
+
+
+async def _earnings_tick():
+    """Near each day's close, buy straddles for tickers whose entry day is today."""
+    e = config.load_earnings()
+    if not e.get("automation_enabled") or not config.keys_configured():
+        return
+    now = datetime.now(ET)
+    if now.weekday() >= 5:
+        return
+    today = now.date()
+    close = now.replace(hour=16, minute=0, second=0, microsecond=0)
+    mins = int(e.get("entry_minutes_before_close", 5))
+    if not (close - timedelta(minutes=mins) <= now < close):
+        return
+
+    from . import earnings as earn
+    changed = False
+    for entry in e.get("calendar", []):
+        try:
+            ed = date.fromisoformat(entry["earnings_date"])
+        except Exception:  # noqa: BLE001
+            continue
+        if earn.entry_day_for(ed, entry.get("timing", "AMC")) != today:
+            continue
+        if entry.get("last_fired") == today.isoformat():
+            continue
+        entry["last_fired"] = today.isoformat()  # mark first to avoid double-fire
+        changed = True
+        stamp = now.strftime("%Y-%m-%d %H:%M ET")
+        try:
+            res = await asyncio.to_thread(earn.open_straddle, entry["ticker"], e["preset"], ed)
+            entry["last_result"] = res
+            e.setdefault("log", []).insert(0, {"ticker": entry["ticker"], "when_et": stamp, "result": res})
+            db.log_event("earnings_open", res)
+        except Exception as ex:  # noqa: BLE001
+            err = {"ok": False, "error": str(ex), "ticker": entry["ticker"]}
+            entry["last_result"] = err
+            e.setdefault("log", []).insert(0, {"ticker": entry["ticker"], "when_et": stamp, "result": err})
+            db.log_event("error", {"action": "earnings_open", "ticker": entry["ticker"], "error": str(ex)})
+    if changed:
+        config.save_earnings(e)
 
 
 async def _tick():

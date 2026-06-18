@@ -91,3 +91,42 @@ def update_automation(updates: dict) -> dict:
         patch = {k: v for k, v in updates["preset"].items() if k in PRESET_FIELDS}
         data["preset"].update(patch)
     return save_automation(data)
+
+
+# --- Earnings straddle strategy ---
+EARNINGS_PATH = BASE_DIR / "earnings.json"
+EARNINGS_PRESET_FIELDS = {
+    "strategy_type", "strike_mode", "custom_strike", "strangle_offset",
+    "quantity", "min_dte_after_earnings", "limit_shade",
+}
+
+
+def load_earnings() -> dict:
+    if not EARNINGS_PATH.exists():
+        default = {
+            "automation_enabled": False,
+            "entry_minutes_before_close": 5,
+            "preset": {
+                "strategy_type": "straddle",
+                "strike_mode": "atm",
+                "custom_strike": 0,
+                "strangle_offset": 5.0,
+                "quantity": 1,
+                "min_dte_after_earnings": 0,
+                "limit_shade": 0.0,
+            },
+            "calendar": [],
+            "log": [],
+        }
+        with open(EARNINGS_PATH, "w") as f:
+            json.dump(default, f, indent=2)
+        return default
+    with open(EARNINGS_PATH) as f:
+        return json.load(f)
+
+
+def save_earnings(data: dict) -> dict:
+    with open(EARNINGS_PATH, "w") as f:
+        json.dump(data, f, indent=2)
+    return data
+

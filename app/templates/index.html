@@ -253,7 +253,7 @@ async function loadStatus() {
     if (co) co.value = p.center_override ? p.center_override : '';
     loadExpirations(p.underlying, p.expiration || '');
     const pt = document.getElementById('presetTitle');
-    if (pt && p.num_rungs) pt.textContent = `${p.underlying} · ${p.num_rungs}-Rung Iron Butterfly · ${p.dte}DTE · $${p.wing_width} wings`;
+    if (pt && p.num_rungs) pt.textContent = `${p.underlying} · ${p.num_rungs}-Rung Iron Butterfly · exp ${p.expiration || (p.dte+'DTE')} · $${p.wing_width} wings`;
     const sl = document.getElementById('spotLabel'); if (sl) sl.textContent = (p.underlying||'') + ' spot';
     if (s.account) {
       const a = s.account;
@@ -285,8 +285,8 @@ async function loadPreview() {
       document.getElementById('pv_collateral').textContent = '$'+f(r.collateral);
     }
     drawPayoff(p);
-    const _dte=document.getElementById('dte').value, _wing=document.getElementById('wing_width').value;
-    document.getElementById('presetTitle').textContent = `${p.underlying} · ${p.rungs.length}-Rung Iron Butterfly · ${_dte}DTE · $${_wing} wings`;
+    const _wing=document.getElementById('wing_width').value;
+    document.getElementById('presetTitle').textContent = `${p.underlying} · ${p.rungs.length}-Rung Iron Butterfly · exp ${p.expiration} · $${_wing} wings`;
     const totLegs = p.rungs.reduce((a,r)=>a+r.legs.length,0);
     document.getElementById('legsTitle').textContent = `Legs (${totLegs})`;
     const _sl=document.getElementById('spotLabel'); if(_sl) _sl.textContent=(p.underlying||'')+' spot';

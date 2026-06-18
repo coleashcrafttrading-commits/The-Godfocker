@@ -113,3 +113,51 @@ def payoff_summary(centers: list[float], credits: list[float | None],
         "credit_collected": round(credit, 2),
         "rungs_priced": n,
     }
+
+
+def payoff_curve(centers: list[float], credits: list[float | None],
+                 wing: float, qty: int, spot: float, points: int = 160) -> dict | None:
+    """Combined expiration P/L of the whole ladder across a range of SPY prices.
+
+    This is the true at-expiration payoff (sum of every rung's P/L at each price),
+    suitable for plotting a Robinhood-style simulator curve. Returns the sampled
+    curve, the price range, the breakeven crossings, and the P/L extremes.
+    """
+    pairs = [(c, cr) for c, cr in zip(centers, credits) if cr is not None]
+    if not pairs:
+        return None
+    mult = 100 * int(qty)
+
+    lo = min(c for c, _ in pairs) - wing - 4
+    hi = max(c for c, _ in pairs) + wing + 4
+    lo = min(lo, spot - 2)
+    hi = max(hi, spot + 2)
+
+    def pl_at(s: float) -> float:
+        return sum(cr - min(abs(s - c), wing) for c, cr in pairs) * mult
+
+    curve: list[list[float]] = []
+    breakevens: list[float] = []
+    step = (hi - lo) / points
+    prev = None
+    for i in range(points + 1):
+        s = lo + i * step
+        pl = pl_at(s)
+        curve.append([round(s, 2), round(pl, 2)])
+        if prev is not None:
+            s0, pl0 = prev
+            if (pl0 <= 0 < pl) or (pl0 >= 0 > pl):
+                t = pl0 / (pl0 - pl) if (pl0 - pl) != 0 else 0.0
+                breakevens.append(round(s0 + t * (s - s0), 2))
+        prev = (s, pl)
+
+    pls = [p for _, p in curve]
+    return {
+        "curve": curve,
+        "breakevens": breakevens,
+        "max_pl": round(max(pls), 2),
+        "min_pl": round(min(pls), 2),
+        "lo": round(lo, 2),
+        "hi": round(hi, 2),
+        "centers": [c for c, _ in pairs],
+    }

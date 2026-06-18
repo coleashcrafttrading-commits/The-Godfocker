@@ -17,7 +17,14 @@ from alpaca.trading.enums import OrderClass, OrderSide, QueryOrderStatus, TimeIn
 from alpaca.trading.requests import GetOrdersRequest, LimitOrderRequest, OptionLegRequest
 
 from . import config
-from .strategy import Rung, all_symbols, build_ladder, net_credit, payoff_summary
+from .strategy import (
+    Rung,
+    all_symbols,
+    build_ladder,
+    net_credit,
+    payoff_curve,
+    payoff_summary,
+)
 
 EASTERN = ZoneInfo("America/New_York")
 
@@ -149,6 +156,13 @@ def preview(preset: dict) -> dict:
         wing=float(preset["wing_width"]),
         qty=int(preset["quantity"]),
     )
+    curve = payoff_curve(
+        centers=[rv["center"] for rv in rung_views],
+        credits=[rv["credit"] for rv in rung_views],
+        wing=float(preset["wing_width"]),
+        qty=int(preset["quantity"]),
+        spot=spot,
+    )
 
     return {
         "underlying": underlying,
@@ -161,6 +175,7 @@ def preview(preset: dict) -> dict:
         "total_credit": round(total_credit, 2),
         "est_credit_dollars": round(total_credit * 100, 2),
         "risk": risk,
+        "curve": curve,
     }
 
 

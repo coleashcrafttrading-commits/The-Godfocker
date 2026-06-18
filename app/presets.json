@@ -4,7 +4,7 @@
     "spy_3rung_interlock": {
       "label": "SPY 3-Rung Interlocking Iron Butterfly (0DTE)",
       "underlying": "SPY",
-      "dte": 0,
+      "dte": 1,
       "num_rungs": 3,
       "strike_increment": 1.0,
       "center_spacing": 1.0,

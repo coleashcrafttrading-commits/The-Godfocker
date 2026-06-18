@@ -49,6 +49,12 @@
   .pos { color: var(--green2); } .neg { color: var(--red2); }
   .muted { color: var(--muted); }
   .big { font-size: 26px; font-weight: 800; font-variant-numeric: tabular-nums; }
+  .stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+  .stat { background: var(--panel2); border: 1px solid var(--line); border-radius: 10px;
+    padding: 12px 10px; text-align: center; }
+  .stat-label { font-size: 11px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); }
+  .stat-val { font-size: 22px; font-weight: 800; font-variant-numeric: tabular-nums; margin-top: 4px; }
+  .stat-sub { font-size: 11px; color: var(--muted); margin-top: 2px; min-height: 14px; }
   #toast { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%);
     background: var(--panel2); border: 1px solid var(--line); border-radius: 10px;
     padding: 12px 16px; max-width: 90%; display: none; z-index: 9; }
@@ -103,8 +109,23 @@
         <div class="k">Est. net credit / set</div><div class="v" id="pv_credit">—</div>
       </div>
       <div class="spacer"></div>
-      <div class="muted" style="text-align:center">Total estimated credit</div>
-      <div class="big" id="pv_dollars" style="text-align:center">—</div>
+      <div class="stats">
+        <div class="stat">
+          <div class="stat-label">Max Profit</div>
+          <div class="stat-val pos" id="pv_maxprofit">—</div>
+          <div class="stat-sub" id="pv_maxprofit_at"></div>
+        </div>
+        <div class="stat">
+          <div class="stat-label">Max Loss</div>
+          <div class="stat-val neg" id="pv_maxloss">—</div>
+          <div class="stat-sub">at the tails</div>
+        </div>
+        <div class="stat">
+          <div class="stat-label">Collateral / BP</div>
+          <div class="stat-val" id="pv_collateral">—</div>
+          <div class="stat-sub" id="pv_credit2"></div>
+        </div>
+      </div>
       <div class="spacer"></div>
       <table id="legsTable">
         <thead><tr><th>Leg</th><th>Side</th><th>Strike</th><th>Mid</th></tr></thead>
@@ -194,8 +215,14 @@ async function loadPreview() {
     document.getElementById('pv_spot').textContent = '$'+f(p.spot);
     document.getElementById('pv_exp').textContent = p.expiration;
     document.getElementById('pv_credit').textContent = '$'+f(p.total_credit/p.quantity);
-    document.getElementById('pv_dollars').textContent = '$'+f(p.est_credit_dollars);
-    document.getElementById('pv_dollars').className = 'big ' + (p.est_credit_dollars>=0?'pos':'neg');
+    const r = p.risk;
+    if (r) {
+      document.getElementById('pv_maxprofit').textContent = '$'+f(r.max_profit);
+      document.getElementById('pv_maxprofit_at').textContent = 'if SPY @ '+f(r.max_profit_price,0);
+      document.getElementById('pv_maxloss').textContent = '-$'+f(Math.abs(r.max_loss));
+      document.getElementById('pv_collateral').textContent = '$'+f(r.collateral);
+      document.getElementById('pv_credit2').textContent = '$'+f(r.credit_collected)+' credit';
+    }
     const tb = document.querySelector('#legsTable tbody'); tb.innerHTML = '';
     for (const r of p.rungs) {
       const hdr = document.createElement('tr');

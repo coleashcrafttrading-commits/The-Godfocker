@@ -79,3 +79,45 @@ def net_credit(rung: Rung, mids: dict[str, float]) -> float:
             raise ValueError(f"No quote for {leg.symbol}")
         total += mid if leg.side == "sell" else -mid
     return round(total, 2)
+
+
+def payoff_summary(centers: list[float], credits: list[float | None],
+                   wing: float, qty: int) -> dict | None:
+    """Combined expiration P/L for the whole ladder.
+
+    Each rung's P/L at underlying price S is:  credit_i - min(|S - center_i|, wing)
+    (an Iron Butterfly: max profit = credit at the center, loss capped at the wing).
+    We scan S across the full range to find the combined max profit / max loss, and
+    derive collateral (the broker buying-power hold = the position's max loss).
+    """
+    pairs = [(c, cr) for c, cr in zip(centers, credits) if cr is not None]
+    if not pairs:
+        return None
+
+    mult = 100 * int(qty)
+    lo = min(c for c, _ in pairs) - wing - 5
+    hi = max(c for c, _ in pairs) + wing + 5
+
+    best = float("-inf")
+    best_price = None
+    worst = float("inf")
+    steps = int(round((hi - lo) / 0.05))
+    for i in range(steps + 1):
+        s = lo + i * 0.05
+        pl = sum(cr - min(abs(s - c), wing) for c, cr in pairs)
+        if pl > best:
+            best, best_price = pl, s
+        if pl < worst:
+            worst = pl
+
+    # Defined-risk: max loss happens in the tails where every wing is in the money.
+    collateral = sum(wing - cr for _, cr in pairs) * mult
+    total_credit = sum(cr for _, cr in pairs) * mult
+    return {
+        "max_profit": round(best * mult, 2),
+        "max_profit_price": round(best_price, 2),
+        "max_loss": round(worst * mult, 2),          # negative number
+        "collateral": round(collateral, 2),           # buying-power hold
+        "credit_collected": round(total_credit, 2),
+        "rungs_priced": len(pairs),
+    }

@@ -191,7 +191,7 @@
 
     <div class="panel grow">
       <div style="display:flex;justify-content:space-between;align-items:center;">
-        <h2 style="margin:0">Open Option Positions</h2>
+        <h2 style="margin:0">Open Option Positions <span id="posTotal" style="font-size:13px;font-weight:700"></span></h2>
         <button class="btn ghost" onclick="loadPositions()">↻</button>
       </div>
       <div class="spacer"></div>
@@ -307,13 +307,22 @@ async function loadPositions() {
   try {
     const d = await jget('/api/positions');
     const tb = document.querySelector('#posTable tbody'); tb.innerHTML = '';
-    if (!d.positions.length) { tb.innerHTML = '<tr><td colspan="5" class="muted">none</td></tr>'; return; }
+    const pt = document.getElementById('posTotal');
+    if (!d.positions.length) { tb.innerHTML = '<tr><td colspan="5" class="muted">none</td></tr>'; if(pt){pt.textContent='';} return; }
     for (const p of d.positions) {
       const tr = document.createElement('tr');
       tr.innerHTML = `<td>${p.symbol}</td><td>${f(p.qty,0)}</td><td>${f(p.avg_entry_price)}</td>`
         + `<td>${f(p.market_value)}</td><td class="${p.unrealized_pl>=0?'pos':'neg'}">${f(p.unrealized_pl)}</td>`;
       tb.appendChild(tr);
     }
+    const totPL = d.positions.reduce((a,p)=>a+(p.unrealized_pl||0),0);
+    const totMV = d.positions.reduce((a,p)=>a+(p.market_value||0),0);
+    const ftr = document.createElement('tr');
+    ftr.style.borderTop = '2px solid var(--muted)';
+    ftr.innerHTML = `<td><b>TOTAL</b></td><td></td><td></td><td><b>${f(totMV)}</b></td>`
+      + `<td class="${totPL>=0?'pos':'neg'}"><b>${(totPL>=0?'+$':'-$')+f(Math.abs(totPL))}</b></td>`;
+    tb.appendChild(ftr);
+    if (pt) { pt.textContent = `· Unrealized ${(totPL>=0?'+$':'-$')+f(Math.abs(totPL))}`; pt.className = totPL>=0?'pos':'neg'; }
   } catch (e) { toast('Positions: '+e.message, false); }
 }
 

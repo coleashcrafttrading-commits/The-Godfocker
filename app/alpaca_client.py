@@ -102,6 +102,24 @@ def list_expirations(underlying: str, count: int = 16) -> list[dict]:
     return [{"date": e.isoformat(), "dte": (e - today).days} for e in exps]
 
 
+def get_chain_strikes(underlying: str, exp: date, spot: float) -> list[float]:
+    """Actual listed strikes (with BOTH a call and a put) for an underlying+expiration."""
+    band = max(spot * 0.30, 10.0)
+    req = GetOptionContractsRequest(
+        underlying_symbols=[underlying.upper()],
+        expiration_date_gte=exp,
+        expiration_date_lte=exp,
+        strike_price_gte=str(round(spot - band, 0)),
+        strike_price_lte=str(round(spot + band, 0)),
+        status="active",
+        limit=1000,
+    )
+    contracts = _trading().get_option_contracts(req).option_contracts
+    calls = {float(c.strike_price) for c in contracts if "call" in str(c.type).lower()}
+    puts = {float(c.strike_price) for c in contracts if "put" in str(c.type).lower()}
+    return sorted(calls & puts)
+
+
 def get_account() -> dict:
     a = _trading().get_account()
     return {
@@ -169,7 +187,11 @@ def preview(preset: dict) -> dict:
     exp = resolve_expiration(preset)
     spot_detail = get_spot_detail(underlying)
     spot = spot_detail["price"]
-    rungs = build_ladder(spot, preset, exp)
+    try:
+        strikes = get_chain_strikes(underlying, exp, spot)
+    except Exception:  # noqa: BLE001 - fall back to the increment grid
+        strikes = []
+    rungs = build_ladder(spot, preset, exp, available_strikes=strikes)
     mids = get_mids(all_symbols(rungs))
 
     rung_views = []
@@ -195,11 +217,12 @@ def preview(preset: dict) -> dict:
     warnings: list[str] = []
     wing = float(preset["wing_width"])
 
+    total_legs = sum(len(rv["legs"]) for rv in rung_views)
     missing = sum(1 for rv in rung_views for l in rv["legs"] if l["mid"] is None)
     if missing:
         warnings.append(
-            f"{missing} option leg(s) have no quote — those strikes/expiration may not be "
-            f"listed for {underlying}. Try a valid expiration date or adjust the strikes/wing width."
+            f"{missing} of {total_legs} option legs have no live quote (illiquid strike, or the "
+            f"market is closed). {underlying} may need a different expiration or wing width."
         )
 
     # Put-call parity from the middle rung: short call/put share a strike.
@@ -313,7 +336,11 @@ def open_ladder(preset: dict) -> dict:
     exp = resolve_expiration(preset)
 
     spot = get_spot_price(underlying)
-    rungs = build_ladder(spot, preset, exp)
+    try:
+        strikes = get_chain_strikes(underlying, exp, spot)
+    except Exception:  # noqa: BLE001 - fall back to the increment grid
+        strikes = []
+    rungs = build_ladder(spot, preset, exp, available_strikes=strikes)
     mids = get_mids(all_symbols(rungs))
 
     client = _trading()

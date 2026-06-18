@@ -43,37 +43,57 @@ class Rung:
     legs: list[Leg] = field(default_factory=list)
 
 
-def build_ladder(spot: float, preset: dict, exp: date) -> list[Rung]:
-    """Return the list of rungs (each a 4-leg Iron Butterfly) for the ladder."""
+def _nearest(strikes: list[float], target: float) -> float:
+    return min(strikes, key=lambda s: abs(s - target))
+
+
+def _nearest_above(strikes: list[float], target: float, floor: float) -> float | None:
+    cands = [s for s in strikes if s > floor]
+    return min(cands, key=lambda s: abs(s - target)) if cands else None
+
+
+def _nearest_below(strikes: list[float], target: float, ceil: float) -> float | None:
+    cands = [s for s in strikes if s < ceil]
+    return min(cands, key=lambda s: abs(s - target)) if cands else None
+
+
+def build_ladder(spot: float, preset: dict, exp: date,
+                 available_strikes: list[float] | None = None) -> list[Rung]:
+    """Return the list of rungs (each a 4-leg Iron Butterfly) for the ladder.
+
+    When `available_strikes` (the ticker's actually-listed strikes for this expiration)
+    is given, every center and wing snaps to a REAL strike — so it works on tickers
+    whose grid isn't $1 (NVDA, etc.). Without it, falls back to the increment grid.
+    """
     underlying = preset["underlying"]
     n = int(preset["num_rungs"])
     spacing = float(preset["center_spacing"])
     wing = float(preset["wing_width"])
     increment = float(preset["strike_increment"])
+    strikes = sorted(available_strikes) if available_strikes else None
 
-    # Middle center = a manual override if set, else the ATM strike.
     override = preset.get("center_override")
-    if override:  # 0 / None / "" -> fall back to ATM
-        center = nearest_strike(float(override), increment)
-    else:
-        center = nearest_strike(spot, increment)
+    base = float(override) if override else spot
+    center = _nearest(strikes, base) if strikes else nearest_strike(base, increment)
 
-    # Centers on the strike grid using INTEGER offsets from the middle, so even rung
-    # counts still land on real strikes (not half-dollars). Every center + wing is
-    # snapped to the increment too. Duplicates (if spacing < increment) are dropped.
     half = (n - 1) // 2
     centers: list[float] = []
     seen: set[float] = set()
     for i in range(n):
-        c = nearest_strike(center + (i - half) * spacing, increment)
+        raw = center + (i - half) * spacing
+        c = _nearest(strikes, raw) if strikes else nearest_strike(raw, increment)
         if c not in seen:
             seen.add(c)
             centers.append(c)
 
     rungs: list[Rung] = []
     for c in centers:
-        up = nearest_strike(c + wing, increment)
-        dn = nearest_strike(c - wing, increment)
+        if strikes:
+            up = _nearest_above(strikes, c + wing, c) or nearest_strike(c + wing, increment)
+            dn = _nearest_below(strikes, c - wing, c) or nearest_strike(c - wing, increment)
+        else:
+            up = nearest_strike(c + wing, increment)
+            dn = nearest_strike(c - wing, increment)
         legs = [
             Leg(occ_symbol(underlying, exp, "C", c), "sell", "C", c),
             Leg(occ_symbol(underlying, exp, "P", c), "sell", "P", c),

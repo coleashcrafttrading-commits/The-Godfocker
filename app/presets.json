@@ -1,0 +1,18 @@
+{
+  "active": "spy_3rung_interlock",
+  "presets": {
+    "spy_3rung_interlock": {
+      "label": "SPY 3-Rung Interlocking Iron Butterfly (0DTE)",
+      "underlying": "SPY",
+      "dte": 0,
+      "num_rungs": 3,
+      "strike_increment": 1.0,
+      "center_spacing": 1.0,
+      "wing_width": 3.0,
+      "quantity": 1,
+      "order_type": "limit",
+      "limit_mode": "mid",
+      "limit_shade": 0.00
+    }
+  }
+}

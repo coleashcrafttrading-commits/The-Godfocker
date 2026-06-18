@@ -1,0 +1,265 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Butterfly Bot</title>
+<style>
+  :root {
+    --bg: #0e1116; --panel: #171c24; --panel2: #1f2630; --line: #2a323d;
+    --text: #e6edf3; --muted: #8b97a7; --green: #2ea043; --green2: #3fb950;
+    --red: #da3633; --red2: #f85149; --amber: #d29922; --blue: #388bfd;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text);
+    font: 14px/1.5 -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif; }
+  .wrap { max-width: 1040px; margin: 0 auto; padding: 22px 18px 60px; }
+  h1 { font-size: 20px; margin: 0; }
+  h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .06em;
+    color: var(--muted); margin: 0 0 12px; }
+  .row { display: flex; gap: 14px; flex-wrap: wrap; }
+  .panel { background: var(--panel); border: 1px solid var(--line);
+    border-radius: 12px; padding: 16px; }
+  .grow { flex: 1 1 320px; }
+  .topbar { display: flex; align-items: center; justify-content: space-between;
+    margin-bottom: 18px; gap: 12px; flex-wrap: wrap; }
+  .badge { font-size: 12px; font-weight: 700; padding: 4px 10px; border-radius: 999px; }
+  .badge.paper { background: rgba(56,139,253,.15); color: var(--blue); border: 1px solid var(--blue); }
+  .badge.live  { background: rgba(218,54,51,.15); color: var(--red2); border: 1px solid var(--red2); }
+  .kv { display: grid; grid-template-columns: auto 1fr; gap: 4px 14px; font-size: 13px; }
+  .kv .k { color: var(--muted); }
+  .kv .v { text-align: right; font-variant-numeric: tabular-nums; }
+  .controls { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 14px; }
+  label { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--muted); }
+  input { background: var(--panel2); border: 1px solid var(--line); color: var(--text);
+    border-radius: 8px; padding: 8px 10px; font-size: 14px; font-variant-numeric: tabular-nums; }
+  .btn { border: 0; border-radius: 10px; padding: 14px 18px; font-size: 15px;
+    font-weight: 700; cursor: pointer; color: #fff; width: 100%; }
+  .btn:disabled { opacity: .5; cursor: not-allowed; }
+  .btn.open { background: var(--green); } .btn.open:hover:not(:disabled) { background: var(--green2); }
+  .btn.close { background: var(--red); } .btn.close:hover:not(:disabled) { background: var(--red2); }
+  .btn.ghost { background: var(--panel2); color: var(--text); border: 1px solid var(--line);
+    font-weight: 600; font-size: 13px; padding: 9px 12px; width: auto; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th, td { text-align: right; padding: 6px 8px; border-bottom: 1px solid var(--line);
+    font-variant-numeric: tabular-nums; }
+  th:first-child, td:first-child { text-align: left; }
+  th { color: var(--muted); font-weight: 600; }
+  .sell { color: var(--red2); } .buy { color: var(--green2); }
+  .pos { color: var(--green2); } .neg { color: var(--red2); }
+  .muted { color: var(--muted); }
+  .big { font-size: 26px; font-weight: 800; font-variant-numeric: tabular-nums; }
+  #toast { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%);
+    background: var(--panel2); border: 1px solid var(--line); border-radius: 10px;
+    padding: 12px 16px; max-width: 90%; display: none; z-index: 9; }
+  .spacer { height: 14px; }
+  .hint { font-size: 12px; color: var(--muted); margin-top: 8px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div class="topbar">
+    <div style="display:flex;align-items:center;gap:12px;">
+      <h1>🦋 Butterfly Bot</h1>
+      <span id="modeBadge" class="badge {{ 'paper' if paper else 'live' }}">
+        {{ 'PAPER' if paper else 'LIVE' }}
+      </span>
+    </div>
+    <div id="acct" class="muted">loading account…</div>
+  </div>
+
+  <div class="row">
+    <!-- LEFT: preset + actions -->
+    <div class="panel grow">
+      <h2>Preset — 3-Rung Interlocking Iron Butterfly</h2>
+      <div class="controls">
+        <label>Underlying<input id="underlying" disabled /></label>
+        <label>DTE (0 = today)<input id="dte" type="number" min="0" step="1" /></label>
+        <label>Rungs<input id="num_rungs" type="number" min="1" step="1" /></label>
+        <label>Center spacing ($)<input id="center_spacing" type="number" min="0" step="0.5" /></label>
+        <label>Wing width ($)<input id="wing_width" type="number" min="0.5" step="0.5" /></label>
+        <label>Quantity (per rung)<input id="quantity" type="number" min="1" step="1" /></label>
+        <label>Limit shade ($)<input id="limit_shade" type="number" min="0" step="0.01" /></label>
+      </div>
+      <div class="hint">Limit shade lowers the credit you ask for, to help fills.</div>
+      <div class="spacer"></div>
+      <div class="row">
+        <button class="btn ghost" onclick="savePreset()">Save preset</button>
+        <button class="btn ghost" onclick="loadPreview()">↻ Refresh preview</button>
+      </div>
+      <div class="spacer"></div>
+      <button id="openBtn" class="btn open" onclick="openPosition()">▲ OPEN LADDER</button>
+      <div class="spacer"></div>
+      <button id="closeBtn" class="btn close" onclick="closePositions()">■ CLOSE ALL OPTIONS</button>
+    </div>
+
+    <!-- RIGHT: preview -->
+    <div class="panel grow">
+      <h2>Live Preview</h2>
+      <div class="kv">
+        <div class="k">SPY spot</div><div class="v" id="pv_spot">—</div>
+        <div class="k">Expiration</div><div class="v" id="pv_exp">—</div>
+        <div class="k">Est. net credit / set</div><div class="v" id="pv_credit">—</div>
+      </div>
+      <div class="spacer"></div>
+      <div class="muted" style="text-align:center">Total estimated credit</div>
+      <div class="big" id="pv_dollars" style="text-align:center">—</div>
+      <div class="spacer"></div>
+      <table id="legsTable">
+        <thead><tr><th>Leg</th><th>Side</th><th>Strike</th><th>Mid</th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="spacer"></div>
+
+  <div class="row">
+    <div class="panel grow">
+      <div style="display:flex;justify-content:space-between;align-items:center;">
+        <h2 style="margin:0">Open Option Positions</h2>
+        <button class="btn ghost" onclick="loadPositions()">↻</button>
+      </div>
+      <div class="spacer"></div>
+      <table id="posTable">
+        <thead><tr><th>Symbol</th><th>Qty</th><th>Avg</th><th>Mkt Val</th><th>Unreal. P/L</th></tr></thead>
+        <tbody><tr><td colspan="5" class="muted">none</td></tr></tbody>
+      </table>
+    </div>
+  </div>
+
+</div>
+
+<div id="toast"></div>
+
+<script>
+const PW_REQUIRED = {{ 'true' if password_required else 'false' }};
+let password = "";
+
+function toast(msg, ok=true) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.style.borderColor = ok ? 'var(--green)' : 'var(--red2)';
+  t.style.display = 'block';
+  clearTimeout(window.__tt);
+  window.__tt = setTimeout(() => t.style.display = 'none', 6000);
+}
+function ensurePassword() {
+  if (PW_REQUIRED && !password) password = prompt("Dashboard password:") || "";
+  return password;
+}
+function hdrs() {
+  const h = {'Content-Type': 'application/json'};
+  if (PW_REQUIRED) h['X-Dashboard-Password'] = ensurePassword();
+  return h;
+}
+async function jget(url) {
+  const r = await fetch(url);
+  const d = await r.json();
+  if (!r.ok) throw new Error(d.detail || r.statusText);
+  return d;
+}
+async function jpost(url, body) {
+  const r = await fetch(url, {method:'POST', headers: hdrs(), body: body ? JSON.stringify(body) : null});
+  const d = await r.json();
+  if (!r.ok) throw new Error(d.detail || r.statusText);
+  return d;
+}
+const f = (n, d=2) => (n===null||n===undefined) ? '—' : Number(n).toLocaleString(undefined,{minimumFractionDigits:d,maximumFractionDigits:d});
+
+async function loadStatus() {
+  try {
+    const s = await jget('/api/status');
+    const p = s.preset;
+    for (const k of ['underlying','dte','num_rungs','strike_increment','center_spacing','wing_width','quantity','limit_shade']) {
+      const el = document.getElementById(k); if (el) el.value = p[k];
+    }
+    if (s.account) {
+      const a = s.account;
+      document.getElementById('acct').innerHTML =
+        `#${a.account_number} · ${a.status} · BP $${f(a.buying_power)} · Port $${f(a.portfolio_value)}`
+        + (a.options_level ? ` · L${a.options_level}` : '');
+    } else if (!s.keys_configured) {
+      document.getElementById('acct').innerHTML = '<span class="neg">No API keys — add them to .env and restart.</span>';
+    } else if (s.account_error) {
+      document.getElementById('acct').innerHTML = '<span class="neg">'+s.account_error+'</span>';
+    }
+  } catch (e) { toast('Status error: '+e.message, false); }
+}
+
+async function loadPreview() {
+  try {
+    const p = await jget('/api/preview');
+    document.getElementById('pv_spot').textContent = '$'+f(p.spot);
+    document.getElementById('pv_exp').textContent = p.expiration;
+    document.getElementById('pv_credit').textContent = '$'+f(p.total_credit/p.quantity);
+    document.getElementById('pv_dollars').textContent = '$'+f(p.est_credit_dollars);
+    document.getElementById('pv_dollars').className = 'big ' + (p.est_credit_dollars>=0?'pos':'neg');
+    const tb = document.querySelector('#legsTable tbody'); tb.innerHTML = '';
+    for (const r of p.rungs) {
+      const hdr = document.createElement('tr');
+      hdr.innerHTML = `<td colspan="4" class="muted">Rung @ ${f(r.center,0)} · credit $${f(r.credit)}</td>`;
+      tb.appendChild(hdr);
+      for (const l of r.legs) {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `<td>${l.symbol}</td><td class="${l.side}">${l.side.toUpperCase()} ${l.right}</td>`
+          + `<td>${f(l.strike,0)}</td><td>${f(l.mid)}</td>`;
+        tb.appendChild(tr);
+      }
+    }
+  } catch (e) { toast('Preview: '+e.message, false); }
+}
+
+async function loadPositions() {
+  try {
+    const d = await jget('/api/positions');
+    const tb = document.querySelector('#posTable tbody'); tb.innerHTML = '';
+    if (!d.positions.length) { tb.innerHTML = '<tr><td colspan="5" class="muted">none</td></tr>'; return; }
+    for (const p of d.positions) {
+      const tr = document.createElement('tr');
+      tr.innerHTML = `<td>${p.symbol}</td><td>${f(p.qty,0)}</td><td>${f(p.avg_entry_price)}</td>`
+        + `<td>${f(p.market_value)}</td><td class="${p.unrealized_pl>=0?'pos':'neg'}">${f(p.unrealized_pl)}</td>`;
+      tb.appendChild(tr);
+    }
+  } catch (e) { toast('Positions: '+e.message, false); }
+}
+
+async function savePreset() {
+  const body = {};
+  for (const k of ['dte','num_rungs','center_spacing','wing_width','quantity','limit_shade']) {
+    body[k] = Number(document.getElementById(k).value);
+  }
+  try { await jpost('/api/preset', body); toast('Preset saved.'); loadPreview(); }
+  catch (e) { toast('Save: '+e.message, false); }
+}
+
+async function openPosition() {
+  if (!confirm('Submit the 3-rung butterfly ladder now?')) return;
+  const btn = document.getElementById('openBtn'); btn.disabled = true; btn.textContent = 'Submitting…';
+  try {
+    const r = await jpost('/api/open');
+    toast(`Submitted ${r.submitted}/${r.submitted+r.failed} rungs.` + (r.failed?` ${r.failed} failed.`:''), r.failed===0);
+    loadPositions();
+  } catch (e) { toast('Open failed: '+e.message, false); }
+  finally { btn.disabled = false; btn.textContent = '▲ OPEN LADDER'; }
+}
+
+async function closePositions() {
+  if (!confirm('Market-close ALL open option positions now?')) return;
+  const btn = document.getElementById('closeBtn'); btn.disabled = true; btn.textContent = 'Closing…';
+  try {
+    const r = await jpost('/api/close');
+    toast(`Closed ${r.closed}.` + (r.failed?` ${r.failed} failed.`:''), r.failed===0);
+    loadPositions();
+  } catch (e) { toast('Close failed: '+e.message, false); }
+  finally { btn.disabled = false; btn.textContent = '■ CLOSE ALL OPTIONS'; }
+}
+
+loadStatus();
+loadPreview();
+loadPositions();
+setInterval(loadPositions, 15000);
+</script>
+</body>
+</html>

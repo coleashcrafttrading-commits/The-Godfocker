@@ -2,9 +2,11 @@
 from __future__ import annotations
 
 import asyncio
+import base64
+import secrets
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, Header, HTTPException, Request
+from fastapi import FastAPI, Header, HTTPException, Request, Response
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
@@ -26,9 +28,29 @@ templates = Jinja2Templates(directory=str(config.BASE_DIR / "templates"))
 app.mount("/static", StaticFiles(directory=str(config.BASE_DIR / "static")), name="static")
 
 
+@app.middleware("http")
+async def require_login(request: Request, call_next):
+    """When a dashboard password is set, gate the WHOLE app with HTTP Basic Auth so a
+    public tunnel is safe. With no password set, the app is open (local use only)."""
+    if config.PASSWORD_REQUIRED:
+        auth = request.headers.get("Authorization", "")
+        ok = False
+        if auth.startswith("Basic "):
+            try:
+                pw = base64.b64decode(auth[6:]).decode("utf-8").split(":", 1)[1]
+                ok = secrets.compare_digest(pw, config.DASHBOARD_PASSWORD)
+            except Exception:  # noqa: BLE001
+                ok = False
+        if not ok:
+            return Response(status_code=401, content="Login required",
+                            headers={"WWW-Authenticate": 'Basic realm="Butterfly Bot"'})
+    return await call_next(request)
+
+
 def _check_password(supplied: str | None) -> None:
-    if config.PASSWORD_REQUIRED and supplied != config.DASHBOARD_PASSWORD:
-        raise HTTPException(status_code=401, detail="Wrong or missing dashboard password.")
+    # App-wide HTTP Basic Auth (require_login middleware) gates every request now,
+    # so per-endpoint password checks are redundant.
+    return
 
 
 def _require_keys() -> None:
@@ -44,7 +66,7 @@ def index(request: Request):
     return templates.TemplateResponse("index.html", {
         "request": request,
         "paper": config.IS_PAPER,
-        "password_required": config.PASSWORD_REQUIRED,
+        "password_required": False,
     })
 
 
@@ -53,7 +75,7 @@ def automation_page(request: Request):
     return templates.TemplateResponse("automation.html", {
         "request": request,
         "paper": config.IS_PAPER,
-        "password_required": config.PASSWORD_REQUIRED,
+        "password_required": False,
     })
 
 
@@ -123,7 +145,7 @@ def earnings_page(request: Request):
     return templates.TemplateResponse("earnings.html", {
         "request": request,
         "paper": config.IS_PAPER,
-        "password_required": config.PASSWORD_REQUIRED,
+        "password_required": False,
     })
 
 

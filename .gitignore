@@ -24,3 +24,6 @@ Thumbs.db
 # Runtime automation state (per-machine; auto-created on first run)
 automation.json
 earnings.json
+
+# Tunnel binary (downloaded per-machine)
+cloudflared.exe

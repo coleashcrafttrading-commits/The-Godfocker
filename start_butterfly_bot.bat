@@ -12,5 +12,6 @@ if not exist ".venv\Scripts\python.exe" (
 REM Open the dashboard in the default browser a few seconds after the server starts.
 start "" /b powershell -WindowStyle Hidden -Command "Start-Sleep -Seconds 4; Start-Process 'http://localhost:8050'"
 
-REM Run the server (this window stays open while the dashboard is running).
-".venv\Scripts\python.exe" -m uvicorn app.main:app --host 127.0.0.1 --port 8050
+REM Run the server. Host 0.0.0.0 makes it reachable from your phone (over your home
+REM network or a private Tailscale VPN), not just this PC.
+".venv\Scripts\python.exe" -m uvicorn app.main:app --host 0.0.0.0 --port 8050

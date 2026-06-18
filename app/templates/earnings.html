@@ -55,6 +55,19 @@
   .chip.bmo { color:var(--amber); border-color:var(--amber); background:rgba(210,153,34,.10); }
   .chip.amc { color:var(--blue); border-color:var(--blue); background:rgba(56,139,253,.10); }
   .chip.sel { outline:2px solid var(--text); }
+  @media (max-width: 680px) {
+    .wrap { padding: 12px 12px 32px; }
+    .panel { padding: 12px; overflow-x: auto; }
+    .grow { flex-basis: 100% !important; }
+    .controls { grid-template-columns: 1fr 1fr !important; }
+    .topbar { gap: 8px; } #acct { font-size: 11px; }
+    h1 { font-size: 18px; }
+    table { font-size: 12px; } th, td { padding: 5px 5px; }
+    .nav { flex-wrap: wrap; } .navlink { padding: 7px 12px; font-size: 13px; }
+    .cal-cell { min-height: 58px; padding: 3px; } .cal-grid { gap: 2px; }
+    .chip { font-size: 10px; padding: 1px 4px; } .cal-daynum { font-size: 10px; }
+    .cal-title { font-size: 14px; }
+  }
 </style>
 </head>
 <body>

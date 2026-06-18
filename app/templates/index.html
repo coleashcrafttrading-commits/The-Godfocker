@@ -30,6 +30,18 @@
   .navlink { padding: 8px 16px; border-radius: 9px; text-decoration: none; color: var(--muted);
     border: 1px solid var(--line); font-weight: 600; font-size: 14px; }
   .navlink.active { color: var(--text); background: var(--panel2); border-color: var(--blue); }
+  @media (max-width: 680px) {
+    .wrap { padding: 12px 12px 32px; }
+    .panel { padding: 12px; overflow-x: auto; }
+    .grow { flex-basis: 100% !important; }
+    .controls { grid-template-columns: 1fr 1fr !important; }
+    .topbar { gap: 8px; } #acct { font-size: 11px; }
+    h1 { font-size: 18px; }
+    table { font-size: 12px; } th, td { padding: 5px 6px; }
+    .nav { flex-wrap: wrap; } .navlink { padding: 7px 12px; font-size: 13px; }
+    .cal-cell { min-height: 60px; padding: 3px; } .cal-grid { gap: 2px; }
+    .chip { font-size: 10px; padding: 1px 4px; } .cal-daynum { font-size: 10px; }
+  }
   .kv { display: grid; grid-template-columns: auto 1fr; gap: 4px 14px; font-size: 13px; }
   .kv .k { color: var(--muted); }
   .kv .v { text-align: right; font-variant-numeric: tabular-nums; }

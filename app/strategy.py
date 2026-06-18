@@ -96,21 +96,33 @@ def payoff_summary(centers: list[float], credits: list[float | None],
     Alpaca's actual buying-power hold for a defined-risk fly equals the max loss
     (its "universal spread rule"), which we expose as `broker_margin`.
     """
-    priced = [cr for cr in credits if cr is not None]
-    if not priced:
+    pairs = [(c, cr) for c, cr in zip(centers, credits) if cr is not None]
+    if not pairs:
         return None
 
     mult = 100 * int(qty)
-    n = len(priced)
-    credit = sum(priced) * mult              # total net credit = max profit
-    collateral = wing * n * mult             # strike width x 100 x qty, per rung
-    max_loss = collateral - credit           # = sum(wing - credit_i) * mult, >= 0
+    n = len(pairs)
+
+    # Mathematically calculated max/min: scan the true combined payoff and take its
+    # actual peak and trough (matches the simulator graph). For the interlocking
+    # ladder the peak is below the sum of credits, because SPY settles at one price.
+    lo = min(c for c, _ in pairs) - wing - 4
+    hi = max(c for c, _ in pairs) + wing + 4
+    pts = 600
+
+    def pl_at(s: float) -> float:
+        return sum(cr - min(abs(s - c), wing) for c, cr in pairs) * mult
+
+    vals = [pl_at(lo + i * (hi - lo) / pts) for i in range(pts + 1)]
+    max_profit = max(vals)
+    max_loss = min(vals)                 # negative
+    collateral = wing * n * mult         # strike width x 100 x qty, per rung
     return {
-        "max_profit": round(credit, 2),
-        "max_loss": round(-max_loss, 2),     # negative for display
-        "collateral": round(collateral, 2),  # strike width x 100 (profit + loss)
-        "broker_margin": round(max_loss, 2), # what Alpaca actually reserves
-        "credit_collected": round(credit, 2),
+        "max_profit": round(max_profit, 2),   # true peak of the combined payoff
+        "max_loss": round(max_loss, 2),        # true trough (negative)
+        "collateral": round(collateral, 2),    # strike width x 100
+        "broker_margin": round(-max_loss, 2),  # defined-risk margin = max loss
+        "credit_collected": round(sum(cr for _, cr in pairs) * mult, 2),
         "rungs_priced": n,
     }
 

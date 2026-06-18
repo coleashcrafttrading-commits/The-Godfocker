@@ -83,41 +83,33 @@ def net_credit(rung: Rung, mids: dict[str, float]) -> float:
 
 def payoff_summary(centers: list[float], credits: list[float | None],
                    wing: float, qty: int) -> dict | None:
-    """Combined expiration P/L for the whole ladder.
+    """Defined-risk figures for the ladder, summed across its Iron Butterfly rungs.
 
-    Each rung's P/L at underlying price S is:  credit_i - min(|S - center_i|, wing)
-    (an Iron Butterfly: max profit = credit at the center, loss capped at the wing).
-    We scan S across the full range to find the combined max profit / max loss, and
-    derive collateral (the broker buying-power hold = the position's max loss).
+    Standard short Iron Butterfly math (Macroption / Fidelity):
+      - Max Profit  = net credit collected
+      - Max Loss    = strike width - net credit
+      - Strike Width (= the wing distance) is the gross collateral per contract.
+    Therefore  Max Profit + Max Loss == Strike Width, i.e. profit and loss both
+    add up to the collateral.  Per rung we multiply by 100 (option multiplier) and
+    by quantity, then sum across rungs.
+
+    Alpaca's actual buying-power hold for a defined-risk fly equals the max loss
+    (its "universal spread rule"), which we expose as `broker_margin`.
     """
-    pairs = [(c, cr) for c, cr in zip(centers, credits) if cr is not None]
-    if not pairs:
+    priced = [cr for cr in credits if cr is not None]
+    if not priced:
         return None
 
     mult = 100 * int(qty)
-    lo = min(c for c, _ in pairs) - wing - 5
-    hi = max(c for c, _ in pairs) + wing + 5
-
-    best = float("-inf")
-    best_price = None
-    worst = float("inf")
-    steps = int(round((hi - lo) / 0.05))
-    for i in range(steps + 1):
-        s = lo + i * 0.05
-        pl = sum(cr - min(abs(s - c), wing) for c, cr in pairs)
-        if pl > best:
-            best, best_price = pl, s
-        if pl < worst:
-            worst = pl
-
-    # Defined-risk: max loss happens in the tails where every wing is in the money.
-    collateral = sum(wing - cr for _, cr in pairs) * mult
-    total_credit = sum(cr for _, cr in pairs) * mult
+    n = len(priced)
+    credit = sum(priced) * mult              # total net credit = max profit
+    collateral = wing * n * mult             # strike width x 100 x qty, per rung
+    max_loss = collateral - credit           # = sum(wing - credit_i) * mult, >= 0
     return {
-        "max_profit": round(best * mult, 2),
-        "max_profit_price": round(best_price, 2),
-        "max_loss": round(worst * mult, 2),          # negative number
-        "collateral": round(collateral, 2),           # buying-power hold
-        "credit_collected": round(total_credit, 2),
-        "rungs_priced": len(pairs),
+        "max_profit": round(credit, 2),
+        "max_loss": round(-max_loss, 2),     # negative for display
+        "collateral": round(collateral, 2),  # strike width x 100 (profit + loss)
+        "broker_margin": round(max_loss, 2), # what Alpaca actually reserves
+        "credit_collected": round(credit, 2),
+        "rungs_priced": n,
     }

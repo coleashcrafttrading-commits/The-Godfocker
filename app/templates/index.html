@@ -118,7 +118,7 @@
         <div class="stat">
           <div class="stat-label">Max Loss</div>
           <div class="stat-val neg" id="pv_maxloss">—</div>
-          <div class="stat-sub">at the tails</div>
+          <div class="stat-sub">≈ Alpaca BP hold</div>
         </div>
         <div class="stat">
           <div class="stat-label">Collateral / BP</div>
@@ -233,10 +233,10 @@ async function loadPreview() {
     const r = p.risk;
     if (r) {
       document.getElementById('pv_maxprofit').textContent = '$'+f(r.max_profit);
-      document.getElementById('pv_maxprofit_at').textContent = 'if SPY @ '+f(r.max_profit_price,0);
+      document.getElementById('pv_maxprofit_at').textContent = 'total net credit';
       document.getElementById('pv_maxloss').textContent = '-$'+f(Math.abs(r.max_loss));
       document.getElementById('pv_collateral').textContent = '$'+f(r.collateral);
-      document.getElementById('pv_credit2').textContent = '$'+f(r.credit_collected)+' credit';
+      document.getElementById('pv_credit2').textContent = 'strike width × 100';
     }
     const tb = document.querySelector('#legsTable tbody'); tb.innerHTML = '';
     for (const r of p.rungs) {

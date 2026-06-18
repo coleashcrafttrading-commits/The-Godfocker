@@ -90,7 +90,10 @@
         <label>Quantity (per rung)<input id="quantity" type="number" min="1" step="1" /></label>
         <label>Limit shade ($)<input id="limit_shade" type="number" min="0" step="0.01" /></label>
       </div>
-      <div class="hint">Limit shade lowers the credit you ask for, to help fills.</div>
+      <label style="margin-top:10px">Center strike override (blank = ATM auto)
+        <input id="center_override" type="number" min="0" step="1" placeholder="ATM (auto)" />
+      </label>
+      <div class="hint">Center strike sets the middle rung; the others go one strike below &amp; above. Leave blank to auto-center at ATM. Limit shade lowers the credit you ask for, to help fills. Click <b>Save preset</b> to apply.</div>
       <div class="spacer"></div>
       <div class="row">
         <button class="btn ghost" onclick="savePreset()">Save preset</button>
@@ -219,6 +222,8 @@ async function loadStatus() {
     for (const k of ['underlying','dte','num_rungs','strike_increment','center_spacing','wing_width','quantity','limit_shade']) {
       const el = document.getElementById(k); if (el) el.value = p[k];
     }
+    const co = document.getElementById('center_override');
+    if (co) co.value = p.center_override ? p.center_override : '';
     if (s.account) {
       const a = s.account;
       document.getElementById('acct').innerHTML =
@@ -359,6 +364,8 @@ async function savePreset() {
   for (const k of ['dte','num_rungs','center_spacing','wing_width','quantity','limit_shade']) {
     body[k] = Number(document.getElementById(k).value);
   }
+  const coVal = document.getElementById('center_override').value;
+  body['center_override'] = coVal === '' ? 0 : Number(coVal);
   try { await jpost('/api/preset', body); toast('Preset saved.'); loadPreview(); }
   catch (e) { toast('Save: '+e.message, false); }
 }

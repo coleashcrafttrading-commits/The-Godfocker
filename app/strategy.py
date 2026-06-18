@@ -50,9 +50,14 @@ def build_ladder(spot: float, preset: dict, exp: date) -> list[Rung]:
     wing = float(preset["wing_width"])
     increment = float(preset["strike_increment"])
 
-    atm = nearest_strike(spot, increment)
-    # Centers symmetric around ATM: e.g. n=3 -> [-1, 0, +1] * spacing.
-    centers = [round(atm + (i - (n - 1) / 2.0) * spacing, 2) for i in range(n)]
+    # Middle center = a manual override if set, else the ATM strike.
+    override = preset.get("center_override")
+    if override:  # 0 / None / "" -> fall back to ATM
+        center = nearest_strike(float(override), increment)
+    else:
+        center = nearest_strike(spot, increment)
+    # Centers symmetric around the middle: e.g. n=3 -> [-1, 0, +1] * spacing.
+    centers = [round(center + (i - (n - 1) / 2.0) * spacing, 2) for i in range(n)]
 
     rungs: list[Rung] = []
     for c in centers:

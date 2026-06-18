@@ -61,7 +61,7 @@ async def update_preset(request: Request, x_dashboard_password: str | None = Hea
     _check_password(x_dashboard_password)
     updates = await request.json()
     allowed = {
-        "underlying", "dte", "num_rungs", "strike_increment",
+        "underlying", "dte", "num_rungs", "strike_increment", "center_override",
         "center_spacing", "wing_width", "quantity", "limit_shade",
     }
     patch = {k: v for k, v in updates.items() if k in allowed}

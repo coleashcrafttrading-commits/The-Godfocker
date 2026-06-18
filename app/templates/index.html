@@ -96,7 +96,7 @@
   <div class="row">
     <!-- LEFT: preset + actions -->
     <div class="panel grow">
-      <h2>Preset — 3-Rung Interlocking Iron Butterfly</h2>
+      <h2 id="presetTitle">Preset — Interlocking Iron Butterfly</h2>
       <div class="controls">
         <label>Underlying<input id="underlying" disabled /></label>
         <label>DTE (0 = today)<input id="dte" type="number" min="0" step="1" /></label>
@@ -163,7 +163,7 @@
 
     <!-- FAR RIGHT: legs -->
     <div class="panel grow">
-      <h2>Legs (12)</h2>
+      <h2 id="legsTitle">Legs</h2>
       <table id="legsTable">
         <thead><tr><th>Leg</th><th>Side</th><th>Strike</th><th>Mid</th></tr></thead>
         <tbody></tbody>
@@ -250,6 +250,8 @@ async function loadStatus() {
     }
     const co = document.getElementById('center_override');
     if (co) co.value = p.center_override ? p.center_override : '';
+    const pt = document.getElementById('presetTitle');
+    if (pt && p.num_rungs) pt.textContent = `Preset — ${p.num_rungs}-Rung Interlocking Iron Butterfly`;
     if (s.account) {
       const a = s.account;
       document.getElementById('acct').innerHTML =
@@ -280,6 +282,9 @@ async function loadPreview() {
       document.getElementById('pv_collateral').textContent = '$'+f(r.collateral);
     }
     drawPayoff(p);
+    document.getElementById('presetTitle').textContent = `Preset — ${p.rungs.length}-Rung Interlocking Iron Butterfly`;
+    const totLegs = p.rungs.reduce((a,r)=>a+r.legs.length,0);
+    document.getElementById('legsTitle').textContent = `Legs (${totLegs})`;
     const tb = document.querySelector('#legsTable tbody'); tb.innerHTML = '';
     for (const r of p.rungs) {
       const hdr = document.createElement('tr');
@@ -467,7 +472,8 @@ async function savePreset() {
 }
 
 async function openPosition() {
-  if (!confirm('Submit the 3-rung butterfly ladder now?')) return;
+  const nr = (window.__preview && window.__preview.rungs) ? window.__preview.rungs.length : (document.getElementById('num_rungs').value || '');
+  if (!confirm(`Submit the ${nr}-rung butterfly ladder now?`)) return;
   const btn = document.getElementById('openBtn'); btn.disabled = true; btn.textContent = 'Submitting…';
   try {
     const r = await jpost('/api/open');

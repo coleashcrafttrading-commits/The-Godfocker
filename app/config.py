@@ -49,3 +49,45 @@ def save_active_preset(updates: dict) -> dict:
 
 def keys_configured() -> bool:
     return bool(ALPACA_API_KEY and ALPACA_API_SECRET)
+
+
+# --- Scheduled automation ---
+AUTOMATION_PATH = BASE_DIR / "automation.json"
+PRESET_FIELDS = {
+    "underlying", "dte", "num_rungs", "strike_increment", "center_override",
+    "center_spacing", "wing_width", "quantity", "limit_shade",
+}
+
+
+def load_automation() -> dict:
+    """Automation config: its own copy of the preset + an on/off switch + fire time."""
+    if not AUTOMATION_PATH.exists():
+        default = {
+            "enabled": False,
+            "fire_time_ct": "14:25",   # 2:25 PM Central
+            "last_fired": "",
+            "last_result": None,
+            "preset": active_preset(),
+        }
+        with open(AUTOMATION_PATH, "w") as f:
+            json.dump(default, f, indent=2)
+        return default
+    with open(AUTOMATION_PATH) as f:
+        return json.load(f)
+
+
+def save_automation(data: dict) -> dict:
+    with open(AUTOMATION_PATH, "w") as f:
+        json.dump(data, f, indent=2)
+    return data
+
+
+def update_automation(updates: dict) -> dict:
+    data = load_automation()
+    for k in ("enabled", "fire_time_ct", "last_fired", "last_result"):
+        if k in updates:
+            data[k] = updates[k]
+    if "preset" in updates and isinstance(updates["preset"], dict):
+        patch = {k: v for k, v in updates["preset"].items() if k in PRESET_FIELDS}
+        data["preset"].update(patch)
+    return save_automation(data)

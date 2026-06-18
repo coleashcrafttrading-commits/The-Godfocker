@@ -20,3 +20,6 @@ Thumbs.db
 
 # Logs
 *.log
+
+# Runtime automation state (per-machine; auto-created on first run)
+automation.json

@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Butterfly Bot — Automation</title>
+<style>
+  :root {
+    --bg:#0e1116; --panel:#171c24; --panel2:#1f2630; --line:#2a323d;
+    --text:#e6edf3; --muted:#8b97a7; --green:#2ea043; --green2:#3fb950;
+    --red:#da3633; --red2:#f85149; --amber:#d29922; --blue:#388bfd;
+  }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--text);
+    font:14px/1.5 -apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif; }
+  .wrap { max-width:1100px; margin:0 auto; padding:20px 26px 40px; }
+  h1 { font-size:20px; margin:0; }
+  h2 { font-size:13px; text-transform:uppercase; letter-spacing:.06em; color:var(--muted); margin:0 0 12px; }
+  .row { display:flex; gap:14px; flex-wrap:wrap; }
+  .panel { background:var(--panel); border:1px solid var(--line); border-radius:12px; padding:16px; }
+  .grow { flex:1 1 360px; }
+  .topbar { display:flex; align-items:center; justify-content:space-between; margin-bottom:16px; gap:12px; flex-wrap:wrap; }
+  .badge { font-size:12px; font-weight:700; padding:4px 10px; border-radius:999px; }
+  .badge.paper { background:rgba(56,139,253,.15); color:var(--blue); border:1px solid var(--blue); }
+  .badge.live { background:rgba(218,54,51,.15); color:var(--red2); border:1px solid var(--red2); }
+  .nav { display:flex; gap:8px; margin-bottom:18px; }
+  .navlink { padding:8px 16px; border-radius:9px; text-decoration:none; color:var(--muted);
+    border:1px solid var(--line); font-weight:600; font-size:14px; }
+  .navlink.active { color:var(--text); background:var(--panel2); border-color:var(--blue); }
+  .controls { display:grid; grid-template-columns:1fr 1fr; gap:10px 14px; }
+  label { display:flex; flex-direction:column; gap:4px; font-size:12px; color:var(--muted); }
+  input { background:var(--panel2); border:1px solid var(--line); color:var(--text);
+    border-radius:8px; padding:8px 10px; font-size:14px; font-variant-numeric:tabular-nums; }
+  .btn { border:0; border-radius:10px; padding:12px 16px; font-size:14px; font-weight:700; cursor:pointer; color:#fff; }
+  .btn:disabled { opacity:.5; cursor:not-allowed; }
+  .btn.run { background:var(--blue); width:100%; }
+  .btn.ghost { background:var(--panel2); color:var(--text); border:1px solid var(--line); font-weight:600; }
+  .kv { display:grid; grid-template-columns:auto 1fr; gap:6px 14px; font-size:13px; }
+  .kv .k { color:var(--muted); } .kv .v { text-align:right; font-variant-numeric:tabular-nums; }
+  table { width:100%; border-collapse:collapse; font-size:13px; }
+  th,td { text-align:right; padding:5px 8px; border-bottom:1px solid var(--line); font-variant-numeric:tabular-nums; }
+  th:first-child,td:first-child { text-align:left; } th { color:var(--muted); font-weight:600; }
+  .sell { color:var(--red2); } .buy { color:var(--green2); } .pos { color:var(--green2); } .neg { color:var(--red2); }
+  .muted { color:var(--muted); } .spacer { height:14px; }
+  .hint { font-size:12px; color:var(--muted); margin-top:8px; }
+  .switch { position:relative; display:inline-block; width:58px; height:32px; }
+  .switch input { opacity:0; width:0; height:0; }
+  .slider { position:absolute; cursor:pointer; inset:0; background:var(--line); border-radius:32px; transition:.2s; }
+  .slider:before { content:""; position:absolute; height:24px; width:24px; left:4px; bottom:4px; background:#fff; border-radius:50%; transition:.2s; }
+  input:checked + .slider { background:var(--green); }
+  input:checked + .slider:before { transform:translateX(26px); }
+  .statusline { font-size:13px; }
+  .statusbig { font-size:18px; font-weight:800; }
+  .on { color:var(--green2); } .off { color:var(--muted); }
+  .warnbar { background:rgba(210,153,34,.12); border:1px solid var(--amber); color:var(--amber);
+    border-radius:8px; padding:8px 10px; font-size:12px; margin-bottom:12px; display:none; line-height:1.5; }
+  #toast { position:fixed; bottom:20px; left:50%; transform:translateX(-50%); background:var(--panel2);
+    border:1px solid var(--line); border-radius:10px; padding:12px 16px; max-width:90%; display:none; z-index:9; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div class="topbar">
+    <div style="display:flex;align-items:center;gap:12px;">
+      <h1>🦋 Butterfly Bot</h1>
+      <span class="badge {{ 'paper' if paper else 'live' }}">{{ 'PAPER' if paper else 'LIVE' }}</span>
+    </div>
+    <div id="acct" class="muted"></div>
+  </div>
+
+  <div class="nav">
+    <a href="/" class="navlink">Manual</a>
+    <a href="/automation" class="navlink active">Automation</a>
+  </div>
+
+  <div class="row">
+    <!-- LEFT: switch + status + preset -->
+    <div class="panel grow">
+      <h2>Scheduled Auto-Open</h2>
+      <div style="display:flex;align-items:center;gap:16px;">
+        <label class="switch" style="flex:none">
+          <input type="checkbox" id="enabled" onchange="toggle()" />
+          <span class="slider"></span>
+        </label>
+        <div>
+          <div class="statusbig"><span id="statetext" class="off">OFF</span></div>
+          <div class="statusline muted" id="statusline">Automation is off.</div>
+        </div>
+      </div>
+
+      <div class="spacer"></div>
+      <div class="controls">
+        <label>Fire time (Central, 24h)<input id="fire_time_ct" type="time" /></label>
+        <label>Underlying<input id="underlying" disabled /></label>
+        <label>DTE (0 = today)<input id="dte" type="number" min="0" step="1" /></label>
+        <label>Rungs<input id="num_rungs" type="number" min="1" step="1" /></label>
+        <label>Center spacing ($)<input id="center_spacing" type="number" min="0" step="0.5" /></label>
+        <label>Wing width ($)<input id="wing_width" type="number" min="0.5" step="0.5" /></label>
+        <label>Quantity (per rung)<input id="quantity" type="number" min="1" step="1" /></label>
+        <label>Limit shade ($)<input id="limit_shade" type="number" min="0" step="0.01" /></label>
+      </div>
+      <label style="margin-top:10px">Center strike override (blank = ATM auto)
+        <input id="center_override" type="number" min="0" step="1" placeholder="ATM (auto)" />
+      </label>
+      <div class="hint">At the fire time on each trading day (Mon–Fri), if the switch is ON, the bot
+        opens this exact ladder once. Save changes before relying on them.</div>
+      <div class="spacer"></div>
+      <div class="row">
+        <button class="btn ghost" onclick="savePreset()">Save automation settings</button>
+        <button class="btn ghost" onclick="loadPreview()">↻ Refresh preview</button>
+      </div>
+      <div class="spacer"></div>
+      <button class="btn run" onclick="runNow()">▶ Run this ladder now (test)</button>
+      <div class="hint" id="lastfired"></div>
+    </div>
+
+    <!-- RIGHT: preview -->
+    <div class="panel grow">
+      <h2>What it will trade</h2>
+      <div id="warnbar" class="warnbar"></div>
+      <div class="kv">
+        <div class="k">SPY spot</div><div class="v" id="pv_spot">—</div>
+        <div class="k">Expiration</div><div class="v" id="pv_exp">—</div>
+        <div class="k">Max Profit</div><div class="v pos" id="pv_maxprofit">—</div>
+        <div class="k">Max Loss</div><div class="v neg" id="pv_maxloss">—</div>
+        <div class="k">Collateral</div><div class="v" id="pv_collateral">—</div>
+      </div>
+      <div class="spacer"></div>
+      <table id="legsTable">
+        <thead><tr><th>Leg</th><th>Side</th><th>Strike</th><th>Mid</th></tr></thead>
+        <tbody><tr><td colspan="4" class="muted">—</td></tr></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+const PW_REQUIRED = {{ 'true' if password_required else 'false' }};
+let password = "";
+function toast(m, ok=true){ const t=document.getElementById('toast'); t.textContent=m;
+  t.style.borderColor=ok?'var(--green)':'var(--red2)'; t.style.display='block';
+  clearTimeout(window.__t); window.__t=setTimeout(()=>t.style.display='none',6000); }
+function pw(){ if(PW_REQUIRED && !password) password=prompt("Dashboard password:")||""; return password; }
+function hdrs(){ const h={'Content-Type':'application/json'}; if(PW_REQUIRED) h['X-Dashboard-Password']=pw(); return h; }
+async function jget(u){ const r=await fetch(u); const d=await r.json(); if(!r.ok) throw new Error(d.detail||r.statusText); return d; }
+async function jpost(u,b){ const r=await fetch(u,{method:'POST',headers:hdrs(),body:b?JSON.stringify(b):null});
+  const d=await r.json(); if(!r.ok) throw new Error(d.detail||r.statusText); return d; }
+const f=(n,d=2)=>(n===null||n===undefined)?'—':Number(n).toLocaleString(undefined,{minimumFractionDigits:d,maximumFractionDigits:d});
+
+const PFIELDS=['underlying','dte','num_rungs','center_spacing','wing_width','quantity','limit_shade'];
+
+async function loadAuto(){
+  try{
+    const a=await jget('/api/automation');
+    document.getElementById('enabled').checked = a.enabled;
+    document.getElementById('fire_time_ct').value = a.fire_time_ct;
+    const p=a.preset||{};
+    for(const k of PFIELDS){ const el=document.getElementById(k); if(el) el.value=p[k]; }
+    const co=document.getElementById('center_override'); if(co) co.value = p.center_override? p.center_override:'';
+    renderState(a);
+    if(!a.keys_configured) document.getElementById('acct').innerHTML='<span class="neg">No API keys — add them to .env and restart.</span>';
+  }catch(e){ toast('Status: '+e.message,false); }
+}
+
+function renderState(a){
+  const st=document.getElementById('statetext'), sl=document.getElementById('statusline');
+  if(a.enabled){ st.textContent='ON'; st.className='on'; sl.innerHTML='Armed — next fire '+(a.next_fire||'')+'.'; }
+  else { st.textContent='OFF'; st.className='off'; sl.textContent='Automation is off.'; }
+  const lf=document.getElementById('lastfired');
+  if(a.last_result){
+    const r=a.last_result;
+    lf.innerHTML = 'Last run '+(r.fired_at_ct||'')+': '+
+      (r.ok===false ? '<span class="neg">failed — '+(r.error||'')+'</span>'
+        : '<span class="pos">submitted '+(r.submitted)+'/'+((r.submitted||0)+(r.failed||0))+' rungs</span>');
+  } else { lf.textContent=''; }
+}
+
+async function toggle(){
+  const enabled=document.getElementById('enabled').checked;
+  if(enabled && !confirm('Arm the automation? It will auto-open this ladder at the fire time on every trading day until turned off.')){
+    document.getElementById('enabled').checked=false; return;
+  }
+  try{ const r=await jpost('/api/automation/toggle',{enabled}); renderState({enabled:r.enabled,next_fire:r.next_fire});
+    toast(enabled?'Automation ARMED.':'Automation off.'); }
+  catch(e){ toast('Toggle: '+e.message,false); document.getElementById('enabled').checked=!enabled; }
+}
+
+async function savePreset(){
+  const preset={};
+  for(const k of ['dte','num_rungs','center_spacing','wing_width','quantity','limit_shade']) preset[k]=Number(document.getElementById(k).value);
+  const cv=document.getElementById('center_override').value; preset['center_override']= cv===''?0:Number(cv);
+  const body={ fire_time_ct: document.getElementById('fire_time_ct').value, preset };
+  try{ await jpost('/api/automation/preset',body); toast('Automation settings saved.'); loadPreview(); loadAuto(); }
+  catch(e){ toast('Save: '+e.message,false); }
+}
+
+async function loadPreview(){
+  try{
+    const p=await jget('/api/automation/preview');
+    const wb=document.getElementById('warnbar');
+    if(p.warnings&&p.warnings.length){ wb.style.display='block'; wb.innerHTML='⚠ '+p.warnings.join('<br>⚠ '); }
+    else { wb.style.display='none'; }
+    document.getElementById('pv_spot').textContent='$'+f(p.spot);
+    document.getElementById('pv_exp').textContent=p.expiration;
+    if(p.risk){
+      document.getElementById('pv_maxprofit').textContent='$'+f(p.risk.max_profit);
+      document.getElementById('pv_maxloss').textContent='-$'+f(Math.abs(p.risk.max_loss));
+      document.getElementById('pv_collateral').textContent='$'+f(p.risk.collateral);
+    }
+    const tb=document.querySelector('#legsTable tbody'); tb.innerHTML='';
+    for(const r of p.rungs){
+      const h=document.createElement('tr'); h.innerHTML=`<td colspan="4" class="muted">Rung @ ${f(r.center,0)} · credit $${f(r.credit)}</td>`; tb.appendChild(h);
+      for(const l of r.legs){ const tr=document.createElement('tr');
+        tr.innerHTML=`<td>${l.symbol}</td><td class="${l.side}">${l.side.toUpperCase()} ${l.right}</td><td>${f(l.strike,0)}</td><td>${f(l.mid)}</td>`; tb.appendChild(tr); }
+    }
+  }catch(e){ toast('Preview: '+e.message,false); }
+}
+
+async function runNow(){
+  if(!confirm('Open this automation ladder right now (test)?')) return;
+  try{ const r=await jpost('/api/automation/run'); toast(`Submitted ${r.submitted}/${r.submitted+r.failed} rungs.`, r.failed===0); }
+  catch(e){ toast('Run failed: '+e.message,false); }
+}
+
+loadAuto();
+loadPreview();
+setInterval(loadAuto, 20000);
+</script>
+</body>
+</html>

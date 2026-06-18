@@ -26,6 +26,10 @@
   .badge { font-size: 12px; font-weight: 700; padding: 4px 10px; border-radius: 999px; }
   .badge.paper { background: rgba(56,139,253,.15); color: var(--blue); border: 1px solid var(--blue); }
   .badge.live  { background: rgba(218,54,51,.15); color: var(--red2); border: 1px solid var(--red2); }
+  .nav { display: flex; gap: 8px; margin-bottom: 18px; }
+  .navlink { padding: 8px 16px; border-radius: 9px; text-decoration: none; color: var(--muted);
+    border: 1px solid var(--line); font-weight: 600; font-size: 14px; }
+  .navlink.active { color: var(--text); background: var(--panel2); border-color: var(--blue); }
   .kv { display: grid; grid-template-columns: auto 1fr; gap: 4px 14px; font-size: 13px; }
   .kv .k { color: var(--muted); }
   .kv .v { text-align: right; font-variant-numeric: tabular-nums; }
@@ -82,6 +86,11 @@
       </span>
     </div>
     <div id="acct" class="muted">loading account…</div>
+  </div>
+
+  <div class="nav">
+    <a href="/" class="navlink active">Manual</a>
+    <a href="/automation" class="navlink">Automation</a>
   </div>
 
   <div class="row">

@@ -98,7 +98,7 @@
     <div class="panel grow">
       <h2 id="presetTitle">Preset — Interlocking Iron Butterfly</h2>
       <div class="controls">
-        <label>Underlying<input id="underlying" disabled /></label>
+        <label>Underlying<input id="underlying" placeholder="SPY" /></label>
         <label>DTE (0 = today)<input id="dte" type="number" min="0" step="1" /></label>
         <label>Rungs<input id="num_rungs" type="number" min="1" step="1" /></label>
         <label>Center spacing ($)<input id="center_spacing" type="number" min="0" step="0.5" /></label>
@@ -126,7 +126,7 @@
       <h2>Live Preview</h2>
       <div id="warnbar" class="warnbar"></div>
       <div class="kv">
-        <div class="k">SPY spot</div><div class="v" id="pv_spot">—</div>
+        <div class="k" id="spotLabel">Spot</div><div class="v" id="pv_spot">—</div>
         <div class="k muted" style="font-size:11px">source</div><div class="v muted" id="pv_spot_src" style="font-size:11px">—</div>
         <div class="k">Expiration</div><div class="v" id="pv_exp">—</div>
         <div class="k">Est. net credit / set</div><div class="v" id="pv_credit">—</div>
@@ -251,7 +251,8 @@ async function loadStatus() {
     const co = document.getElementById('center_override');
     if (co) co.value = p.center_override ? p.center_override : '';
     const pt = document.getElementById('presetTitle');
-    if (pt && p.num_rungs) pt.textContent = `Preset — ${p.num_rungs}-Rung Interlocking Iron Butterfly`;
+    if (pt && p.num_rungs) pt.textContent = `${p.underlying} · ${p.num_rungs}-Rung Iron Butterfly · ${p.dte}DTE · $${p.wing_width} wings`;
+    const sl = document.getElementById('spotLabel'); if (sl) sl.textContent = (p.underlying||'') + ' spot';
     if (s.account) {
       const a = s.account;
       document.getElementById('acct').innerHTML =
@@ -282,9 +283,11 @@ async function loadPreview() {
       document.getElementById('pv_collateral').textContent = '$'+f(r.collateral);
     }
     drawPayoff(p);
-    document.getElementById('presetTitle').textContent = `Preset — ${p.rungs.length}-Rung Interlocking Iron Butterfly`;
+    const _dte=document.getElementById('dte').value, _wing=document.getElementById('wing_width').value;
+    document.getElementById('presetTitle').textContent = `${p.underlying} · ${p.rungs.length}-Rung Iron Butterfly · ${_dte}DTE · $${_wing} wings`;
     const totLegs = p.rungs.reduce((a,r)=>a+r.legs.length,0);
     document.getElementById('legsTitle').textContent = `Legs (${totLegs})`;
+    const _sl=document.getElementById('spotLabel'); if(_sl) _sl.textContent=(p.underlying||'')+' spot';
     const tb = document.querySelector('#legsTable tbody'); tb.innerHTML = '';
     for (const r of p.rungs) {
       const hdr = document.createElement('tr');
@@ -388,7 +391,7 @@ function drawPayoff(p){
     <path d="${expLine}" fill="none" stroke="var(--muted)" stroke-width="1" stroke-dasharray="4 3" opacity="0.55"/>
     <path d="${selLine}" fill="none" stroke="#e6edf3" stroke-width="2"/>
     <line x1="${spotX.toFixed(1)}" y1="${padT}" x2="${spotX.toFixed(1)}" y2="${padT+plotH}" stroke="var(--blue)" stroke-width="1.2" stroke-dasharray="4 3"/>
-    <text x="${spotX.toFixed(1)}" y="${(padT+9).toFixed(1)}" fill="var(--blue)" font-size="10" text-anchor="middle">SPY ${p.spot.toFixed(2)}</text>
+    <text x="${spotX.toFixed(1)}" y="${(padT+9).toFixed(1)}" fill="var(--blue)" font-size="10" text-anchor="middle">${p.underlying||''} ${p.spot.toFixed(2)}</text>
     ${yLabels}${xticks}${bes}
     <line id="ch_line" x1="0" y1="${padT}" x2="0" y2="${padT+plotH}" stroke="#e6edf3" stroke-width="1" opacity="0"/>
     <circle id="ch_dot" cx="0" cy="0" r="3.5" fill="#fff" opacity="0"/>
@@ -399,7 +402,7 @@ function drawPayoff(p){
     : (frac>=0.999?'At expiration' : (frac<=0.001?('Now · '+sim.dte_days.toFixed(2)+' DTE') : (days.toFixed(2)+' days to expiry')));
   legend.textContent=(c.breakevens&&c.breakevens.length)?'Breakevens: '+c.breakevens.map(b=>b.toFixed(2)).join('  /  '):'';
 
-  PAY={W,padL,plotW,X,Y,lo,hi,sel};
+  PAY={W,padL,plotW,X,Y,lo,hi,sel,und:p.underlying||''};
   setReadout(null);
 }
 
@@ -417,7 +420,7 @@ function setReadout(price){
   if(line){line.setAttribute('x1',x.toFixed(1));line.setAttribute('x2',x.toFixed(1));line.setAttribute('opacity','0.5');}
   if(dot){dot.setAttribute('cx',x.toFixed(1));dot.setAttribute('cy',y.toFixed(1));dot.setAttribute('opacity','1');dot.setAttribute('fill',pl>=0?'var(--green2)':'var(--red2)');}
   ro.className='';
-  ro.innerHTML=`SPY <b>${price.toFixed(2)}</b> &middot; P/L <b style="color:${pl>=0?'var(--green2)':'var(--red2)'}">${(pl>=0?'+$':'-$')+Math.abs(Math.round(pl))}</b>`;
+  ro.innerHTML=`${PAY.und} <b>${price.toFixed(2)}</b> &middot; P/L <b style="color:${pl>=0?'var(--green2)':'var(--red2)'}">${(pl>=0?'+$':'-$')+Math.abs(Math.round(pl))}</b>`;
 }
 
 function setupPayoff(){
@@ -467,6 +470,7 @@ async function savePreset() {
   }
   const coVal = document.getElementById('center_override').value;
   body['center_override'] = coVal === '' ? 0 : Number(coVal);
+  body['underlying'] = (document.getElementById('underlying').value || 'SPY').toUpperCase().trim();
   try { await jpost('/api/preset', body); toast('Preset saved.'); loadPreview(); }
   catch (e) { toast('Save: '+e.message, false); }
 }

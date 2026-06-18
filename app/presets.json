@@ -2,7 +2,7 @@
   "active": "spy_3rung_interlock",
   "presets": {
     "spy_3rung_interlock": {
-      "label": "SPY 3-Rung Interlocking Iron Butterfly (0DTE)",
+      "label": "Interlocking Iron Butterfly Ladder",
       "underlying": "SPY",
       "dte": 1,
       "num_rungs": 3,

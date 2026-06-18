@@ -92,7 +92,7 @@
       <div class="spacer"></div>
       <div class="controls">
         <label>Fire time (Central, 24h)<input id="fire_time_ct" type="time" /></label>
-        <label>Underlying<input id="underlying" disabled /></label>
+        <label>Underlying<input id="underlying" placeholder="SPY" /></label>
         <label>DTE (0 = today)<input id="dte" type="number" min="0" step="1" /></label>
         <label>Rungs<input id="num_rungs" type="number" min="1" step="1" /></label>
         <label>Center spacing ($)<input id="center_spacing" type="number" min="0" step="0.5" /></label>
@@ -120,7 +120,7 @@
       <h2>What it will trade</h2>
       <div id="warnbar" class="warnbar"></div>
       <div class="kv">
-        <div class="k">SPY spot</div><div class="v" id="pv_spot">—</div>
+        <div class="k" id="spotLabel">Spot</div><div class="v" id="pv_spot">—</div>
         <div class="k">Expiration</div><div class="v" id="pv_exp">—</div>
         <div class="k">Max Profit</div><div class="v pos" id="pv_maxprofit">—</div>
         <div class="k">Max Loss</div><div class="v neg" id="pv_maxloss">—</div>
@@ -192,6 +192,7 @@ async function savePreset(){
   const preset={};
   for(const k of ['dte','num_rungs','center_spacing','wing_width','quantity','limit_shade']) preset[k]=Number(document.getElementById(k).value);
   const cv=document.getElementById('center_override').value; preset['center_override']= cv===''?0:Number(cv);
+  preset['underlying']=(document.getElementById('underlying').value||'SPY').toUpperCase().trim();
   const body={ fire_time_ct: document.getElementById('fire_time_ct').value, preset };
   try{ await jpost('/api/automation/preset',body); toast('Automation settings saved.'); loadPreview(); loadAuto(); }
   catch(e){ toast('Save: '+e.message,false); }
@@ -203,6 +204,7 @@ async function loadPreview(){
     const wb=document.getElementById('warnbar');
     if(p.warnings&&p.warnings.length){ wb.style.display='block'; wb.innerHTML='⚠ '+p.warnings.join('<br>⚠ '); }
     else { wb.style.display='none'; }
+    const sl=document.getElementById('spotLabel'); if(sl) sl.textContent=(p.underlying||'')+' spot';
     document.getElementById('pv_spot').textContent='$'+f(p.spot);
     document.getElementById('pv_exp').textContent=p.expiration;
     if(p.risk){

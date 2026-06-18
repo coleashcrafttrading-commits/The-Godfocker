@@ -161,9 +161,8 @@ def preview(preset: dict) -> dict:
     missing = sum(1 for rv in rung_views for l in rv["legs"] if l["mid"] is None)
     if missing:
         warnings.append(
-            f"{missing} option leg(s) have no quote — that strike or expiration may not be "
-            f"listed. Pick a valid expiration date (SPY lists daily Mon–Fri plus weeklies) "
-            f"or adjust the strikes/wing width."
+            f"{missing} option leg(s) have no quote — those strikes/expiration may not be "
+            f"listed for {underlying}. Try a valid expiration date or adjust the strikes/wing width."
         )
 
     # Put-call parity from the middle rung: short call/put share a strike.
@@ -175,7 +174,7 @@ def preview(preset: dict) -> dict:
         implied_spot = round(cmid - pmid + mid_rung["center"], 2)  # ~ ignores tiny carry
         if abs(implied_spot - spot) > 1.0:
             warnings.append(
-                f"Option quotes look stale: they imply SPY ~${implied_spot:.2f}, but the "
+                f"Option quotes look stale: they imply {underlying} ~${implied_spot:.2f}, but the "
                 f"stock feed says ${spot:.2f}. The options market is likely closed — figures "
                 f"below may be unreliable until it reopens."
             )

@@ -158,6 +158,14 @@ def preview(preset: dict) -> dict:
     warnings: list[str] = []
     wing = float(preset["wing_width"])
 
+    missing = sum(1 for rv in rung_views for l in rv["legs"] if l["mid"] is None)
+    if missing:
+        warnings.append(
+            f"{missing} option leg(s) have no quote — that strike or expiration may not be "
+            f"listed. Pick a valid expiration date (SPY lists daily Mon–Fri plus weeklies) "
+            f"or adjust the strikes/wing width."
+        )
+
     # Put-call parity from the middle rung: short call/put share a strike.
     mid_rung = rung_views[len(rung_views) // 2]
     cmid = next((l["mid"] for l in mid_rung["legs"] if l["side"] == "sell" and l["right"] == "C"), None)
@@ -181,19 +189,8 @@ def preview(preset: dict) -> dict:
             )
             break
 
-    risk = payoff_summary(
-        centers=[rv["center"] for rv in rung_views],
-        credits=[rv["credit"] for rv in rung_views],
-        wing=float(preset["wing_width"]),
-        qty=int(preset["quantity"]),
-    )
-    curve = payoff_curve(
-        centers=[rv["center"] for rv in rung_views],
-        credits=[rv["credit"] for rv in rung_views],
-        wing=float(preset["wing_width"]),
-        qty=int(preset["quantity"]),
-        spot=spot,
-    )
+    risk = payoff_summary(rung_views, int(preset["quantity"]))
+    curve = payoff_curve(rung_views, int(preset["quantity"]), spot)
 
     # Build the interactive-simulator payload: per-leg implied vol + time to expiry,
     # so the dashboard can re-price the whole position at any underlying/time client-side.

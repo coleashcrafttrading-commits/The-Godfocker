@@ -57,16 +57,28 @@ def build_ladder(spot: float, preset: dict, exp: date) -> list[Rung]:
         center = nearest_strike(float(override), increment)
     else:
         center = nearest_strike(spot, increment)
-    # Centers symmetric around the middle: e.g. n=3 -> [-1, 0, +1] * spacing.
-    centers = [round(center + (i - (n - 1) / 2.0) * spacing, 2) for i in range(n)]
+
+    # Centers on the strike grid using INTEGER offsets from the middle, so even rung
+    # counts still land on real strikes (not half-dollars). Every center + wing is
+    # snapped to the increment too. Duplicates (if spacing < increment) are dropped.
+    half = (n - 1) // 2
+    centers: list[float] = []
+    seen: set[float] = set()
+    for i in range(n):
+        c = nearest_strike(center + (i - half) * spacing, increment)
+        if c not in seen:
+            seen.add(c)
+            centers.append(c)
 
     rungs: list[Rung] = []
     for c in centers:
+        up = nearest_strike(c + wing, increment)
+        dn = nearest_strike(c - wing, increment)
         legs = [
             Leg(occ_symbol(underlying, exp, "C", c), "sell", "C", c),
             Leg(occ_symbol(underlying, exp, "P", c), "sell", "P", c),
-            Leg(occ_symbol(underlying, exp, "C", c + wing), "buy", "C", round(c + wing, 2)),
-            Leg(occ_symbol(underlying, exp, "P", c - wing), "buy", "P", round(c - wing, 2)),
+            Leg(occ_symbol(underlying, exp, "C", up), "buy", "C", up),
+            Leg(occ_symbol(underlying, exp, "P", dn), "buy", "P", dn),
         ]
         rungs.append(Rung(center=c, legs=legs))
     return rungs
@@ -87,49 +99,66 @@ def net_credit(rung: Rung, mids: dict[str, float]) -> float:
     return round(total, 2)
 
 
-def payoff_summary(centers: list[float], credits: list[float | None],
-                   wing: float, qty: int) -> dict | None:
-    """Defined-risk figures for the ladder, summed across its Iron Butterfly rungs.
+def _position_pl(rung_views: list[dict], qty: int):
+    """Build the exact combined P/L function straight from the raw legs.
 
-    Standard short Iron Butterfly math (Macroption / Fidelity):
-      - Max Profit  = net credit collected
-      - Max Loss    = strike width - net credit
-      - Strike Width (= the wing distance) is the gross collateral per contract.
-    Therefore  Max Profit + Max Loss == Strike Width, i.e. profit and loss both
-    add up to the collateral.  Per rung we multiply by 100 (option multiplier) and
-    by quantity, then sum across rungs.
-
-    Alpaca's actual buying-power hold for a defined-risk fly equals the max loss
-    (its "universal spread rule"), which we expose as `broker_margin`.
+    Returns (net_credit, multiplier, strikes, pl_at) or None if any leg is unquoted.
+    pl_at(S) = (net_credit - close_liability(S)) * 100 * qty, where the liability is
+    the net intrinsic of all legs (short legs add, long legs subtract). Fully general:
+    any strikes, wing widths, rung counts, symmetric or not.
     """
-    pairs = [(c, cr) for c, cr in zip(centers, credits) if cr is not None]
-    if not pairs:
+    legs = [l for rv in rung_views for l in rv["legs"]]
+    if not legs or any(l.get("mid") is None for l in legs):
         return None
-
     mult = 100 * int(qty)
-    n = len(pairs)
-
-    # Mathematically calculated max/min: scan the true combined payoff and take its
-    # actual peak and trough (matches the simulator graph). For the interlocking
-    # ladder the peak is below the sum of credits, because SPY settles at one price.
-    lo = min(c for c, _ in pairs) - wing - 4
-    hi = max(c for c, _ in pairs) + wing + 4
-    pts = 600
+    nc = sum((1 if l["side"] == "sell" else -1) * l["mid"] for l in legs)
+    strikes = [l["strike"] for l in legs]
 
     def pl_at(s: float) -> float:
-        return sum(cr - min(abs(s - c), wing) for c, cr in pairs) * mult
+        liab = 0.0
+        for l in legs:
+            intr = (s - l["strike"]) if l["right"] == "C" else (l["strike"] - s)
+            if intr > 0:
+                liab += (1 if l["side"] == "sell" else -1) * intr
+        return (nc - liab) * mult
 
+    return nc, mult, strikes, pl_at
+
+
+def _rung_collateral(rung_views: list[dict], qty: int) -> float:
+    """Sum of each rung's risk width x 100 (the wider of its call/put wing)."""
+    total = 0.0
+    for rv in rung_views:
+        c = rv["center"]
+        ups = [l["strike"] for l in rv["legs"] if l["side"] == "buy" and l["right"] == "C"]
+        dns = [l["strike"] for l in rv["legs"] if l["side"] == "buy" and l["right"] == "P"]
+        wc = (ups[0] - c) if ups else 0.0
+        wp = (c - dns[0]) if dns else 0.0
+        total += max(wc, wp) * 100 * int(qty)
+    return total
+
+
+def payoff_summary(rung_views: list[dict], qty: int) -> dict | None:
+    """Mathematically calculated combined max profit / max loss + collateral.
+
+    Scans the true combined payoff (built from the raw legs) for its peak and trough,
+    so overlapping rungs of any size are handled exactly. Collateral = strike width
+    x 100 per rung; broker_margin (= max loss) is Alpaca's defined-risk hold.
+    """
+    res = _position_pl(rung_views, qty)
+    if res is None:
+        return None
+    nc, mult, strikes, pl_at = res
+    lo, hi = min(strikes) - 2, max(strikes) + 2
+    pts = 800
     vals = [pl_at(lo + i * (hi - lo) / pts) for i in range(pts + 1)]
-    max_profit = max(vals)
-    max_loss = min(vals)                 # negative
-    collateral = wing * n * mult         # strike width x 100 x qty, per rung
     return {
-        "max_profit": round(max_profit, 2),   # true peak of the combined payoff
-        "max_loss": round(max_loss, 2),        # true trough (negative)
-        "collateral": round(collateral, 2),    # strike width x 100
-        "broker_margin": round(-max_loss, 2),  # defined-risk margin = max loss
-        "credit_collected": round(sum(cr for _, cr in pairs) * mult, 2),
-        "rungs_priced": n,
+        "max_profit": round(max(vals), 2),     # true peak of the combined payoff
+        "max_loss": round(min(vals), 2),        # true trough (negative)
+        "collateral": round(_rung_collateral(rung_views, qty), 2),  # strike width x 100/rung
+        "broker_margin": round(-min(vals), 2),  # defined-risk margin = max loss
+        "credit_collected": round(nc * mult, 2),
+        "rungs_priced": len(rung_views),
     }
 
 
@@ -166,26 +195,15 @@ def implied_vol(price: float, S: float, K: float, t: float, r: float, is_call: b
     return round((lo + hi) / 2, 4)
 
 
-def payoff_curve(centers: list[float], credits: list[float | None],
-                 wing: float, qty: int, spot: float, points: int = 160) -> dict | None:
-    """Combined expiration P/L of the whole ladder across a range of SPY prices.
-
-    This is the true at-expiration payoff (sum of every rung's P/L at each price),
-    suitable for plotting a Robinhood-style simulator curve. Returns the sampled
-    curve, the price range, the breakeven crossings, and the P/L extremes.
-    """
-    pairs = [(c, cr) for c, cr in zip(centers, credits) if cr is not None]
-    if not pairs:
+def payoff_curve(rung_views: list[dict], qty: int, spot: float, points: int = 160) -> dict | None:
+    """Combined at-expiration P/L across a price range, for the simulator graph."""
+    res = _position_pl(rung_views, qty)
+    if res is None:
         return None
-    mult = 100 * int(qty)
-
-    lo = min(c for c, _ in pairs) - wing - 4
-    hi = max(c for c, _ in pairs) + wing + 4
+    nc, mult, strikes, pl_at = res
+    lo, hi = min(strikes) - 2, max(strikes) + 2
     lo = min(lo, spot - 2)
     hi = max(hi, spot + 2)
-
-    def pl_at(s: float) -> float:
-        return sum(cr - min(abs(s - c), wing) for c, cr in pairs) * mult
 
     curve: list[list[float]] = []
     breakevens: list[float] = []
@@ -210,5 +228,5 @@ def payoff_curve(centers: list[float], credits: list[float | None],
         "min_pl": round(min(pls), 2),
         "lo": round(lo, 2),
         "hi": round(hi, 2),
-        "centers": [c for c, _ in pairs],
+        "centers": [rv["center"] for rv in rung_views],
     }

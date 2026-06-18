@@ -69,13 +69,13 @@ def get_account() -> dict:
     }
 
 
-def get_spot_price(underlying: str) -> float:
-    """Current underlying price from the SIP NBBO midpoint.
+def get_spot_detail(underlying: str) -> dict:
+    """Current underlying price plus its source and timestamp.
 
-    We use the consolidated (SIP) quote midpoint rather than the last trade: after
-    hours the 'last trade' can be a stale or anomalous block print far from the real
-    market, whereas the NBBO quote tracks where the stock actually is. Falls back to
-    the last trade only if no usable quote is available.
+    Prefer the SIP NBBO midpoint (tracks the real market); after hours the 'last
+    trade' can be a stale/anomalous block print, so it's only a fallback. NOTE:
+    Alpaca's feed stops at 8 PM ET and does not carry the overnight (Blue Ocean)
+    session, so the timestamp can lag a live overnight quote on other platforms.
     """
     client = _stock_data()
     try:
@@ -84,13 +84,19 @@ def get_spot_price(underlying: str) -> float:
         )[underlying]
         bid, ask = float(q.bid_price or 0), float(q.ask_price or 0)
         if bid > 0 and ask > 0 and ask >= bid:
-            return round((bid + ask) / 2, 2)
+            ts = q.timestamp.astimezone(EASTERN).strftime("%b %d %I:%M %p ET")
+            return {"price": round((bid + ask) / 2, 2), "source": "SIP NBBO mid", "time": ts}
     except Exception:  # noqa: BLE001 - fall back to last trade below
         pass
     t = client.get_stock_latest_trade(
         StockLatestTradeRequest(symbol_or_symbols=underlying, feed=DataFeed.SIP)
     )[underlying]
-    return float(t.price)
+    ts = t.timestamp.astimezone(EASTERN).strftime("%b %d %I:%M %p ET")
+    return {"price": float(t.price), "source": "SIP last trade", "time": ts}
+
+
+def get_spot_price(underlying: str) -> float:
+    return get_spot_detail(underlying)["price"]
 
 
 def get_mids(symbols: list[str]) -> dict[str, float]:
@@ -113,7 +119,8 @@ def preview(preset: dict) -> dict:
     """Build the ladder and price each rung WITHOUT submitting anything."""
     underlying = preset["underlying"]
     exp = expiration_for(preset["dte"])
-    spot = get_spot_price(underlying)
+    spot_detail = get_spot_detail(underlying)
+    spot = spot_detail["price"]
     rungs = build_ladder(spot, preset, exp)
     mids = get_mids(all_symbols(rungs))
 
@@ -146,6 +153,8 @@ def preview(preset: dict) -> dict:
     return {
         "underlying": underlying,
         "spot": spot,
+        "spot_source": spot_detail["source"],
+        "spot_time": spot_detail["time"],
         "expiration": exp.isoformat(),
         "quantity": int(preset["quantity"]),
         "rungs": rung_views,

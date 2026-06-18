@@ -105,6 +105,7 @@
       <h2>Live Preview</h2>
       <div class="kv">
         <div class="k">SPY spot</div><div class="v" id="pv_spot">—</div>
+        <div class="k muted" style="font-size:11px">source</div><div class="v muted" id="pv_spot_src" style="font-size:11px">—</div>
         <div class="k">Expiration</div><div class="v" id="pv_exp">—</div>
         <div class="k">Est. net credit / set</div><div class="v" id="pv_credit">—</div>
       </div>
@@ -232,6 +233,7 @@ async function loadPreview() {
   try {
     const p = await jget('/api/preview');
     document.getElementById('pv_spot').textContent = '$'+f(p.spot);
+    document.getElementById('pv_spot_src').textContent = (p.spot_source||'') + (p.spot_time ? ' · '+p.spot_time : '');
     document.getElementById('pv_exp').textContent = p.expiration;
     document.getElementById('pv_credit').textContent = '$'+f(p.total_credit/p.quantity);
     const r = p.risk;

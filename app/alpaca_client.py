@@ -154,6 +154,33 @@ def preview(preset: dict) -> dict:
             ],
         })
 
+    # --- Quote sanity / staleness checks (mostly relevant after hours) ---
+    warnings: list[str] = []
+    wing = float(preset["wing_width"])
+
+    # Put-call parity from the middle rung: short call/put share a strike.
+    mid_rung = rung_views[len(rung_views) // 2]
+    cmid = next((l["mid"] for l in mid_rung["legs"] if l["side"] == "sell" and l["right"] == "C"), None)
+    pmid = next((l["mid"] for l in mid_rung["legs"] if l["side"] == "sell" and l["right"] == "P"), None)
+    implied_spot = None
+    if cmid is not None and pmid is not None:
+        implied_spot = round(cmid - pmid + mid_rung["center"], 2)  # ~ ignores tiny carry
+        if abs(implied_spot - spot) > 1.0:
+            warnings.append(
+                f"Option quotes look stale: they imply SPY ~${implied_spot:.2f}, but the "
+                f"stock feed says ${spot:.2f}. The options market is likely closed — figures "
+                f"below may be unreliable until it reopens."
+            )
+
+    # A defined-risk fly can't collect more credit than its wing width (max loss >= 0).
+    for rv in rung_views:
+        if rv["credit"] is not None and rv["credit"] >= wing:
+            warnings.append(
+                f"Rung @ {rv['center']:.0f}: quoted credit ${rv['credit']:.2f} ≥ wing width "
+                f"${wing:.2f}, which is impossible with live quotes — that leg's quote is stale or crossed."
+            )
+            break
+
     risk = payoff_summary(
         centers=[rv["center"] for rv in rung_views],
         credits=[rv["credit"] for rv in rung_views],
@@ -219,6 +246,8 @@ def preview(preset: dict) -> dict:
         "risk": risk,
         "curve": curve,
         "sim": sim,
+        "warnings": warnings,
+        "implied_spot": implied_spot,
     }
 
 

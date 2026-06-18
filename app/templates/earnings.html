@@ -42,6 +42,19 @@
   #toast { position:fixed; bottom:20px; left:50%; transform:translateX(-50%); background:var(--panel2); border:1px solid var(--line); border-radius:10px; padding:12px 16px; max-width:90%; display:none; z-index:9; }
   .tag { font-size:11px; padding:2px 7px; border-radius:6px; border:1px solid var(--line); }
   .tag.bmo { color:var(--amber); border-color:var(--amber); } .tag.amc { color:var(--blue); border-color:var(--blue); }
+  .cal-head { display:flex; justify-content:space-between; align-items:center; margin-bottom:10px; gap:10px; }
+  .cal-title { font-size:16px; font-weight:800; }
+  .cal-grid { display:grid; grid-template-columns:repeat(7,1fr); gap:4px; }
+  .cal-dow { text-align:center; font-size:11px; color:var(--muted); padding:4px 0; font-weight:600; }
+  .cal-cell { background:var(--panel2); border:1px solid var(--line); border-radius:8px; min-height:92px; padding:4px 5px; cursor:pointer; display:flex; flex-direction:column; gap:3px; overflow:hidden; }
+  .cal-cell:hover { border-color:var(--muted); }
+  .cal-cell.dim { opacity:.35; }
+  .cal-cell.today { border-color:var(--blue); box-shadow:inset 0 0 0 1px var(--blue); }
+  .cal-daynum { font-size:11px; color:var(--muted); }
+  .chip { font-size:11px; font-weight:700; padding:2px 6px; border-radius:6px; border:1px solid var(--line); cursor:pointer; white-space:nowrap; }
+  .chip.bmo { color:var(--amber); border-color:var(--amber); background:rgba(210,153,34,.10); }
+  .chip.amc { color:var(--blue); border-color:var(--blue); background:rgba(56,139,253,.10); }
+  .chip.sel { outline:2px solid var(--text); }
 </style>
 </head>
 <body>
@@ -99,41 +112,54 @@
   <!-- Calendar -->
   <div class="row">
     <div class="panel grow" style="flex:2 1 600px">
-      <h2>Earnings Calendar</h2>
-      <div class="controls" style="grid-template-columns:1fr 1fr 1fr auto;align-items:end;">
+      <div class="cal-head">
+        <div class="cal-title" id="calLabel">—</div>
+        <div style="display:flex;gap:6px;">
+          <button class="btn ghost sm" onclick="prevMonth()">‹ Prev</button>
+          <button class="btn ghost sm" onclick="gotoToday()">Today</button>
+          <button class="btn ghost sm" onclick="nextMonth()">Next ›</button>
+        </div>
+      </div>
+      <div class="controls" style="grid-template-columns:1fr 1fr 1fr auto;align-items:end;margin-bottom:10px;">
         <label>Ticker<input id="c_ticker" placeholder="AAPL" /></label>
         <label>Earnings date<input id="c_date" type="date" /></label>
         <label>Timing<select id="c_timing"><option value="AMC">AMC (after close)</option><option value="BMO">BMO (before open)</option></select></label>
         <button class="btn run" onclick="addRow()">+ Add</button>
       </div>
+      <div class="cal-grid" id="calGrid"></div>
+      <div class="hint">Click a day to set the date, then add a ticker. Click a company chip to preview / buy / remove it. <span class="tag amc">AMC</span> after close · <span class="tag bmo">BMO</span> before open.</div>
       <div class="spacer"></div>
-      <label>Bulk import (one per line: <code>TICKER, YYYY-MM-DD, AMC|BMO</code>)
-        <textarea id="importBox" placeholder="AAPL, 2026-07-30, AMC&#10;NVDA, 2026-08-27, AMC&#10;WMT, 2026-08-20, BMO"></textarea></label>
-      <div class="row" style="margin-top:8px">
-        <button class="btn ghost" onclick="importRows()">Import list</button>
-        <button class="btn ghost red" onclick="clearCal()">Clear all</button>
-      </div>
-      <div class="spacer"></div>
-      <table id="calTable">
-        <thead><tr><th>Ticker</th><th>Earnings</th><th>Timing</th><th>Buy on</th><th>Last run</th><th></th></tr></thead>
-        <tbody><tr><td colspan="6" class="muted">No companies yet — add some above.</td></tr></tbody>
-      </table>
+      <details>
+        <summary class="muted" style="cursor:pointer;font-size:12px">Bulk import / clear all</summary>
+        <div class="spacer"></div>
+        <label>Paste one per line: <code>TICKER, YYYY-MM-DD, AMC|BMO</code>
+          <textarea id="importBox" placeholder="AAPL, 2026-07-30, AMC&#10;NVDA, 2026-08-27, AMC&#10;WMT, 2026-08-20, BMO"></textarea></label>
+        <div class="row" style="margin-top:8px">
+          <button class="btn ghost" onclick="importRows()">Import list</button>
+          <button class="btn ghost red" onclick="clearCal()">Clear all</button>
+        </div>
+      </details>
     </div>
 
     <!-- Preview -->
     <div class="panel grow">
       <h2>Straddle Preview</h2>
-      <div class="muted" id="previewHint">Click <b>Preview</b> on a calendar row to see the exact contracts it will buy.</div>
+      <div class="muted" id="previewHint">Click a company chip on the calendar to see the exact contracts it will buy.</div>
       <div id="previewBox" style="display:none">
         <div class="kv" style="display:grid;grid-template-columns:auto 1fr;gap:6px 14px;font-size:13px;">
           <div class="muted">Ticker</div><div style="text-align:right" id="pv_ticker">—</div>
           <div class="muted">Spot</div><div style="text-align:right" id="pv_spot">—</div>
           <div class="muted">Expiration</div><div style="text-align:right" id="pv_exp">—</div>
           <div class="muted">Net debit (cost to buy)</div><div style="text-align:right" id="pv_debit">—</div>
-          <div class="muted">Total cost / Max loss</div><div style="text-align:right neg" id="pv_cost">—</div>
+          <div class="muted">Total cost / Max loss</div><div style="text-align:right" class="neg" id="pv_cost">—</div>
         </div>
         <div class="spacer"></div>
         <table id="legsTable"><thead><tr><th>Leg</th><th>Side</th><th>Strike</th><th>Mid</th></tr></thead><tbody></tbody></table>
+        <div class="spacer"></div>
+        <div class="row">
+          <button class="btn run" onclick="buySelected()">▶ Buy this straddle now</button>
+          <button class="btn ghost red" onclick="removeSelected()">Remove from calendar</button>
+        </div>
       </div>
     </div>
   </div>
@@ -170,28 +196,49 @@ async function loadEarnings(){
     if(e.automation_enabled){ st.textContent='ON'; st.className='on'; sl.textContent='Armed — buys straddles near close on each ticker’s entry day.'; }
     else { st.textContent='OFF'; st.className='off'; sl.textContent='Automation off.'; }
     if(!e.keys_configured) document.getElementById('acct').innerHTML='<span class="neg">No API keys.</span>';
-    renderCalendar(e.calendar||[]);
+    window.__cal = e.calendar||[]; renderCalendar();
     renderPnl(e.pnl);
     renderLog(e.log||[]);
   }catch(err){ toast('Load: '+err.message,false); }
 }
 
-function renderCalendar(cal){
-  const tb=document.querySelector('#calTable tbody'); tb.innerHTML='';
-  if(!cal.length){ tb.innerHTML='<tr><td colspan="6" class="muted">No companies yet — add some above.</td></tr>'; return; }
-  for(const c of cal){
-    const lr = c.last_result ? (c.last_result.ok===false ? '<span class="neg">failed</span>' : '<span class="pos">bought</span>') : '<span class="muted">—</span>';
-    const tr=document.createElement('tr');
-    tr.innerHTML=`<td><b>${c.ticker}</b></td><td>${c.earnings_date}</td>`
-      +`<td><span class="tag ${c.timing.toLowerCase()}">${c.timing}</span></td>`
-      +`<td>${c.entry_day||'—'}</td><td>${lr}</td>`
-      +`<td style="text-align:right;white-space:nowrap">`
-      +`<button class="btn ghost sm" onclick="previewTicker('${c.ticker}','${c.earnings_date}')">Preview</button> `
-      +`<button class="btn run sm" onclick="buyNow('${c.ticker}','${c.earnings_date}')">Buy now</button> `
-      +`<button class="btn red sm" onclick="delRow(${c.index})">✕</button></td>`;
-    tb.appendChild(tr);
+const MONTHS=['January','February','March','April','May','June','July','August','September','October','November','December'];
+let calYear, calMonth, selEntry=null;
+function fmtDate(d){ return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; }
+function prevMonth(){ calMonth--; if(calMonth<0){calMonth=11;calYear--;} renderCalendar(); }
+function nextMonth(){ calMonth++; if(calMonth>11){calMonth=0;calYear++;} renderCalendar(); }
+function gotoToday(){ const n=new Date(); calYear=n.getFullYear(); calMonth=n.getMonth(); renderCalendar(); }
+
+function renderCalendar(){
+  const cal=window.__cal||[];
+  if(calYear===undefined){ const n=new Date(); calYear=n.getFullYear(); calMonth=n.getMonth(); }
+  document.getElementById('calLabel').textContent = MONTHS[calMonth]+' '+calYear;
+  const byDate={}; for(const c of cal){ (byDate[c.earnings_date]=byDate[c.earnings_date]||[]).push(c); }
+  const grid=document.getElementById('calGrid'); grid.innerHTML='';
+  for(const d of ['Sun','Mon','Tue','Wed','Thu','Fri','Sat']){ const el=document.createElement('div'); el.className='cal-dow'; el.textContent=d; grid.appendChild(el); }
+  const startDow=new Date(calYear,calMonth,1).getDay();
+  const todayStr=fmtDate(new Date());
+  for(let i=0;i<42;i++){
+    const cd=new Date(calYear,calMonth,1-startDow+i), ds=fmtDate(cd);
+    const cell=document.createElement('div');
+    cell.className='cal-cell'+(cd.getMonth()===calMonth?'':' dim')+(ds===todayStr?' today':'');
+    cell.onclick=()=>{ document.getElementById('c_date').value=ds; document.getElementById('c_ticker').focus(); };
+    const dn=document.createElement('div'); dn.className='cal-daynum'; dn.textContent=cd.getDate(); cell.appendChild(dn);
+    for(const e of (byDate[ds]||[])){
+      const chip=document.createElement('span');
+      chip.className='chip '+e.timing.toLowerCase()+(selEntry&&selEntry.index===e.index?' sel':'');
+      chip.textContent=e.ticker; chip.title=e.ticker+' '+e.timing+' — click to preview';
+      chip.onclick=(ev)=>{ ev.stopPropagation(); selectEntry(e); };
+      cell.appendChild(chip);
+    }
+    grid.appendChild(cell);
   }
 }
+
+function selectEntry(e){ selEntry=e; renderCalendar(); previewTicker(e.ticker, e.earnings_date); }
+function buySelected(){ if(selEntry) buyNow(selEntry.ticker, selEntry.earnings_date); }
+function removeSelected(){ if(!selEntry)return; const i=selEntry.index; selEntry=null;
+  document.getElementById('previewBox').style.display='none'; document.getElementById('previewHint').style.display='block'; delRow(i); }
 function renderPnl(pnl){
   const tb=document.querySelector('#pnlTable tbody'); tb.innerHTML='';
   const tot=document.getElementById('pnlTotal');

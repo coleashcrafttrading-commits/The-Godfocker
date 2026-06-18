@@ -99,8 +99,8 @@
     <div class="panel grow">
       <h2 id="presetTitle">Preset — Interlocking Iron Butterfly</h2>
       <div class="controls">
-        <label>Underlying<input id="underlying" placeholder="SPY" /></label>
-        <label>DTE (0 = today)<input id="dte" type="number" min="0" step="1" /></label>
+        <label>Underlying<input id="underlying" placeholder="SPY" onchange="onUnderlyingChange()" /></label>
+        <label>Expiration<select id="expiration" onchange="savePreset()"></select></label>
         <label>Rungs<input id="num_rungs" type="number" min="1" step="1" /></label>
         <label>Center spacing ($)<input id="center_spacing" type="number" min="0" step="0.5" /></label>
         <label>Wing width ($)<input id="wing_width" type="number" min="0.5" step="0.5" /></label>
@@ -251,6 +251,7 @@ async function loadStatus() {
     }
     const co = document.getElementById('center_override');
     if (co) co.value = p.center_override ? p.center_override : '';
+    loadExpirations(p.underlying, p.expiration || '');
     const pt = document.getElementById('presetTitle');
     if (pt && p.num_rungs) pt.textContent = `${p.underlying} · ${p.num_rungs}-Rung Iron Butterfly · ${p.dte}DTE · $${p.wing_width} wings`;
     const sl = document.getElementById('spotLabel'); if (sl) sl.textContent = (p.underlying||'') + ' spot';
@@ -473,11 +474,41 @@ async function cancelOrders() {
   } catch (e) { toast('Cancel failed: '+e.message, false); }
 }
 
+async function loadExpirations(underlying, selectDate) {
+  const sel = document.getElementById('expiration');
+  if (!sel) return;
+  sel.innerHTML = '<option>loading…</option>';
+  try {
+    const d = await jget('/api/expirations?underlying=' + encodeURIComponent(underlying || 'SPY'));
+    sel.innerHTML = '';
+    for (const x of d.expirations) {
+      const o = document.createElement('option');
+      o.value = x.date; o.dataset.dte = x.dte;
+      o.textContent = `${x.date}  (${x.dte}DTE)`;
+      sel.appendChild(o);
+    }
+    if (selectDate) sel.value = selectDate;
+    if (!sel.value && sel.options.length) sel.selectedIndex = 0;
+  } catch (e) {
+    sel.innerHTML = '<option value="">(no dates — check ticker)</option>';
+  }
+}
+
+async function onUnderlyingChange() {
+  const u = (document.getElementById('underlying').value || 'SPY').toUpperCase().trim();
+  document.getElementById('underlying').value = u;
+  await loadExpirations(u);
+  savePreset();
+}
+
 async function savePreset() {
   const body = {};
-  for (const k of ['dte','num_rungs','center_spacing','wing_width','quantity','limit_shade']) {
+  for (const k of ['num_rungs','center_spacing','wing_width','quantity','limit_shade']) {
     body[k] = Number(document.getElementById(k).value);
   }
+  const expSel = document.getElementById('expiration');
+  body['expiration'] = expSel.value || '';
+  body['dte'] = Number((expSel.selectedOptions[0] && expSel.selectedOptions[0].dataset.dte) || 0);
   const coVal = document.getElementById('center_override').value;
   body['center_override'] = coVal === '' ? 0 : Number(coVal);
   body['underlying'] = (document.getElementById('underlying').value || 'SPY').toUpperCase().trim();

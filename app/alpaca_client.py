@@ -14,7 +14,12 @@ from alpaca.data.requests import (
 )
 from alpaca.trading.client import TradingClient
 from alpaca.trading.enums import OrderClass, OrderSide, QueryOrderStatus, TimeInForce
-from alpaca.trading.requests import GetOrdersRequest, LimitOrderRequest, OptionLegRequest
+from alpaca.trading.requests import (
+    GetOptionContractsRequest,
+    GetOrdersRequest,
+    LimitOrderRequest,
+    OptionLegRequest,
+)
 
 from . import config
 from .strategy import (
@@ -65,6 +70,36 @@ def _option_quotes(symbols: list[str]):
 def expiration_for(dte: int) -> date:
     """Expiration date that is `dte` days from today (Eastern). dte=0 -> today."""
     return (datetime.now(EASTERN) + timedelta(days=int(dte))).date()
+
+
+def resolve_expiration(preset: dict) -> date:
+    """Use the preset's explicit expiration date if set, else fall back to dte."""
+    exp = preset.get("expiration")
+    if exp:
+        try:
+            return date.fromisoformat(str(exp))
+        except ValueError:
+            pass
+    return expiration_for(preset.get("dte", 0))
+
+
+def list_expirations(underlying: str, count: int = 16) -> list[dict]:
+    """Real, tradable expiration dates for an underlying (nearest first), with DTE."""
+    underlying = underlying.upper()
+    spot = get_spot_price(underlying)
+    today = datetime.now(EASTERN).date()
+    band = max(spot * 0.02, 2.0)  # tight strike band -> few contracts/exp -> many exps
+    req = GetOptionContractsRequest(
+        underlying_symbols=[underlying],
+        expiration_date_gte=today,
+        strike_price_gte=str(round(spot - band, 0)),
+        strike_price_lte=str(round(spot + band, 0)),
+        status="active",
+        limit=1000,
+    )
+    contracts = _trading().get_option_contracts(req).option_contracts
+    exps = sorted({c.expiration_date for c in contracts})[:count]
+    return [{"date": e.isoformat(), "dte": (e - today).days} for e in exps]
 
 
 def get_account() -> dict:
@@ -131,7 +166,7 @@ def get_mids(symbols: list[str]) -> dict[str, float]:
 def preview(preset: dict) -> dict:
     """Build the ladder and price each rung WITHOUT submitting anything."""
     underlying = preset["underlying"]
-    exp = expiration_for(preset["dte"])
+    exp = resolve_expiration(preset)
     spot_detail = get_spot_detail(underlying)
     spot = spot_detail["price"]
     rungs = build_ladder(spot, preset, exp)
@@ -275,7 +310,7 @@ def open_ladder(preset: dict) -> dict:
     underlying = preset["underlying"]
     qty = int(preset["quantity"])
     shade = float(preset.get("limit_shade", 0.0))
-    exp = expiration_for(preset["dte"])
+    exp = resolve_expiration(preset)
 
     spot = get_spot_price(underlying)
     rungs = build_ladder(spot, preset, exp)

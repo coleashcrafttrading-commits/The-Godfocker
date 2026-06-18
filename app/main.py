@@ -270,11 +270,20 @@ async def update_preset(request: Request, x_dashboard_password: str | None = Hea
     _check_password(x_dashboard_password)
     updates = await request.json()
     allowed = {
-        "underlying", "dte", "num_rungs", "strike_increment", "center_override",
+        "underlying", "dte", "expiration", "num_rungs", "strike_increment", "center_override",
         "center_spacing", "wing_width", "quantity", "limit_shade",
     }
     patch = {k: v for k, v in updates.items() if k in allowed}
     return config.save_active_preset(patch)
+
+
+@app.get("/api/expirations")
+def expirations(underlying: str):
+    _require_keys()
+    try:
+        return {"underlying": underlying.upper(), "expirations": alpaca_client.list_expirations(underlying)}
+    except Exception as e:  # noqa: BLE001
+        raise HTTPException(status_code=502, detail=f"Could not load expirations: {e}")
 
 
 @app.get("/api/preview")

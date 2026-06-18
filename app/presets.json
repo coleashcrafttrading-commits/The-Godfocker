@@ -4,7 +4,7 @@
     "spy_3rung_interlock": {
       "label": "Interlocking Iron Butterfly Ladder",
       "underlying": "SPY",
-      "dte": 1,
+      "dte": 0,
       "num_rungs": 3,
       "strike_increment": 1.0,
       "center_override": 0,

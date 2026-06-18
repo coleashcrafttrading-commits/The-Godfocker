@@ -111,18 +111,20 @@ def get_spot_price(underlying: str) -> float:
 
 
 def get_mids(symbols: list[str]) -> dict[str, float]:
-    """Latest mid price per option symbol. Falls back to bid or ask if one side is missing."""
+    """True NBBO midpoint (mark) per option symbol — the price we set orders at.
+
+    Only returns a price when there is a valid TWO-SIDED quote (bid > 0, ask > 0,
+    ask >= bid). One-sided, empty, or crossed quotes are omitted on purpose, so a
+    combo is never submitted at a fabricated/skewed price. A leg with no clean
+    two-sided quote leaves its rung unpriced (and flagged) instead of "wonky".
+    """
     quotes = _option_quotes(symbols)
     mids: dict[str, float] = {}
     for sym, q in quotes.items():
         bid = float(q.bid_price or 0)
         ask = float(q.ask_price or 0)
-        if bid > 0 and ask > 0:
+        if bid > 0 and ask > 0 and ask >= bid:
             mids[sym] = round((bid + ask) / 2, 2)
-        elif ask > 0:
-            mids[sym] = round(ask, 2)
-        elif bid > 0:
-            mids[sym] = round(bid, 2)
     return mids
 
 

@@ -4,9 +4,14 @@ from __future__ import annotations
 from datetime import date, datetime, timedelta
 from zoneinfo import ZoneInfo
 
+from alpaca.data.enums import DataFeed, OptionsFeed
 from alpaca.data.historical import StockHistoricalDataClient
 from alpaca.data.historical.option import OptionHistoricalDataClient
-from alpaca.data.requests import OptionLatestQuoteRequest, StockLatestTradeRequest
+from alpaca.data.requests import (
+    OptionLatestQuoteRequest,
+    StockLatestQuoteRequest,
+    StockLatestTradeRequest,
+)
 from alpaca.trading.client import TradingClient
 from alpaca.trading.enums import OrderClass, OrderSide, QueryOrderStatus, TimeInForce
 from alpaca.trading.requests import GetOrdersRequest, LimitOrderRequest, OptionLegRequest
@@ -29,6 +34,23 @@ def _option_data() -> OptionHistoricalDataClient:
     return OptionHistoricalDataClient(config.ALPACA_API_KEY, config.ALPACA_API_SECRET)
 
 
+def _option_quotes(symbols: list[str]):
+    """Latest option quotes, preferring the paid real-time OPRA feed.
+
+    Falls back to the free 'indicative' feed (and then the client default) if the
+    OPRA subscription isn't available, so the dashboard still works either way.
+    """
+    client = _option_data()
+    for feed in (OptionsFeed.OPRA, OptionsFeed.INDICATIVE):
+        try:
+            return client.get_option_latest_quote(
+                OptionLatestQuoteRequest(symbol_or_symbols=symbols, feed=feed)
+            )
+        except Exception:  # noqa: BLE001 - try the next feed
+            continue
+    return client.get_option_latest_quote(OptionLatestQuoteRequest(symbol_or_symbols=symbols))
+
+
 def expiration_for(dte: int) -> date:
     """Expiration date that is `dte` days from today (Eastern). dte=0 -> today."""
     return (datetime.now(EASTERN) + timedelta(days=int(dte))).date()
@@ -48,15 +70,32 @@ def get_account() -> dict:
 
 
 def get_spot_price(underlying: str) -> float:
-    req = StockLatestTradeRequest(symbol_or_symbols=underlying)
-    res = _stock_data().get_stock_latest_trade(req)
-    return float(res[underlying].price)
+    """Current underlying price from the SIP NBBO midpoint.
+
+    We use the consolidated (SIP) quote midpoint rather than the last trade: after
+    hours the 'last trade' can be a stale or anomalous block print far from the real
+    market, whereas the NBBO quote tracks where the stock actually is. Falls back to
+    the last trade only if no usable quote is available.
+    """
+    client = _stock_data()
+    try:
+        q = client.get_stock_latest_quote(
+            StockLatestQuoteRequest(symbol_or_symbols=underlying, feed=DataFeed.SIP)
+        )[underlying]
+        bid, ask = float(q.bid_price or 0), float(q.ask_price or 0)
+        if bid > 0 and ask > 0 and ask >= bid:
+            return round((bid + ask) / 2, 2)
+    except Exception:  # noqa: BLE001 - fall back to last trade below
+        pass
+    t = client.get_stock_latest_trade(
+        StockLatestTradeRequest(symbol_or_symbols=underlying, feed=DataFeed.SIP)
+    )[underlying]
+    return float(t.price)
 
 
 def get_mids(symbols: list[str]) -> dict[str, float]:
     """Latest mid price per option symbol. Falls back to bid or ask if one side is missing."""
-    req = OptionLatestQuoteRequest(symbol_or_symbols=symbols)
-    quotes = _option_data().get_option_latest_quote(req)
+    quotes = _option_quotes(symbols)
     mids: dict[str, float] = {}
     for sym, q in quotes.items():
         bid = float(q.bid_price or 0)
